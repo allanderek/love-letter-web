@@ -29,10 +29,13 @@ class Game(object):
         self.hands = {x: self.deck.pop(0) for x in self.players}
         self.draw_card()
 
+    def take_top_card(self):
+        return self.deck.pop(0)
+
     def draw_card(self):
         player = self.players.pop(0)
         card = self.hands[player]
-        new_card = self.deck.pop(0)
+        new_card = self.take_top_card()
         self.on_turn = player, card, new_card
 
     def play_turn(self, who, card, nominated_player=None, nominated_card=None):
@@ -68,6 +71,17 @@ class Game(object):
                 # return without placing the current player 
                 return
             # If the cards are equal nothing happens.
+
+        if card == Card.prince:
+            if nominated_player is None:
+                raise Exception("You have to nominate a player to play the prince.")
+            if nominated_player not in [player] + self.players:
+                raise Exception("You have to prince against a player still in the game.")
+            new_card = self.take_top_card()
+            if nominated_player == player:
+                kept_card = new_card
+            else:
+                self.hands[nominated_player] = new_card
 
         if card == Card.countess:
             # This is fine, we need to check above that a player never manages
@@ -144,4 +158,25 @@ class GameTest(unittest.TestCase):
         """ This tests the prince has the desired effect, we will also check
             that you can prince yourself.
         """
-        pass
+        deck = [ Card.prince, # player a is dealt this card
+                 Card.guard, # player b is dealt this card
+                 Card.prince, # player c is dealt this card
+                 Card.guard, # player d is dealt this card
+                 Card.guard, # player a draws this card
+                 Card.princess, # player b draws this when princed by 'a'
+                 Card.countess, # player b draws this card on their turn
+                 Card.handmaid, # player c draws this card on their turn
+                 Card.king # player c princes themselves and draws this card.
+                ]
+        players = ['a', 'b', 'c', 'd']
+        game = Game(players, deck=deck)
+        game.play_turn('a', Card.prince, nominated_player='b')
+        # Assert that 'b' now has the princess not the guard they were dealt.
+        self.assertEqual(game.hands['b'], Card.princess)
+        game.draw_card()
+        game.play_turn('b', Card.countess)
+        game.draw_card()
+        game.play_turn('c', Card.prince, nominated_player='c')
+        # So now 'b' should still have the prince and 'c' should have a king.
+        self.assertEqual(game.hands['b'], Card.princess)
+        self.assertEqual(game.hands['c'], Card.king)
