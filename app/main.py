@@ -83,6 +83,14 @@ class Game(object):
             else:
                 self.hands[nominated_player] = new_card
 
+        if card == Card.king:
+            if nominated_player is None:
+                raise Exception("You have to nominate a player to play the king")
+            if nominated_player not in self.players:
+                raise Exception("You have to king against a player still in the game.")
+            opponents_card = self.hands[nominated_player]
+            kept_card, self.hands[nominated_player] = opponents_card, kept_card
+
         if card == Card.countess:
             # This is fine, we need to check above that a player never manages
             # to avoid discarding the countess when they hold the prince or the
@@ -180,3 +188,16 @@ class GameTest(unittest.TestCase):
         # So now 'b' should still have the prince and 'c' should have a king.
         self.assertEqual(game.hands['b'], Card.princess)
         self.assertEqual(game.hands['c'], Card.king)
+
+    def test_king(self):
+        deck = [ Card.king, # player a is dealt this card
+                 Card.guard, # player b is dealt this card
+                 Card.prince, # player c is dealt this card
+                 Card.princess, # player d is dealt this card
+                 Card.guard, # player a draws this card
+                ]
+        players = ['a', 'b', 'c', 'd']
+        game = Game(players, deck=deck)
+        game.play_turn('a', Card.king, nominated_player='d')
+        self.assertEqual(game.hands['a'], Card.princess)
+        self.assertEqual(game.hands['d'], Card.guard)
