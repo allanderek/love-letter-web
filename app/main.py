@@ -22,6 +22,12 @@ default_deck = [Card.princess, Card.countess, Card.king, Card.prince,
 def create_random_deck():
     return random.sample(default_deck, len(default_deck) - 1)
 
+class CountessForcedException(Exception):
+    """ An exception to be raised whenever a player attempts to play a king or
+        a prince when holding on to the Countess
+    """
+    pass
+
 class Game(object):
     def __init__(self, players, deck=None):
         self.deck = deck if deck is not None else create_random_deck()
@@ -40,7 +46,13 @@ class Game(object):
         self.on_turn = player, card, new_card
 
     def play_turn(self, who, card, nominated_player=None, nominated_card=None):
+        # In theory we should set self.on_turn to None, but we back-out of some
+        # moves because it is illegal and for testing purposes it is nice to be
+        # able to continue with the game after a failed move. But it would be
+        # nice to be able to make sure a player is out of the game, which simply
+        # inspecting self.players does not quite do.
         player, card_one, card_two = self.on_turn
+
         if player != who:
             raise Exception("It's not your turn: " + player + " " + str(self.players))
         if card not in [card_one, card_two]:
@@ -84,7 +96,9 @@ class Game(object):
             self.handmaided.add(player)
 
         if card == Card.prince:
-            if nominated_player is None:
+            if kept_card == Card.countess:
+                raise CountessForcedException("You must discard the countess if you have a prince")
+            elif nominated_player is None:
                 raise Exception("You have to nominate a player to play the prince.")
             if nominated_player not in [player] + self.players:
                 raise Exception("You have to prince against a player still in the game.")
@@ -111,8 +125,12 @@ class Game(object):
 
         if card == Card.king:
             # Note, if you are forced to swap the princess I don't think this
-            # counts as discarding it, so you're not out.
-            if nominated_player is None:
+            # counts as discarding it, so you're not out, so we do not check
+            # for that here.
+
+            if kept_card == Card.countess:
+                raise CountessForcedException("You must discard the countess if you have a king")
+            elif nominated_player is None:
                 if all(p in self.handmaided for p in self.players):
                     # Okay so fine there is no-one you can play the king against
                     # hence it becomes a simple discard.
@@ -294,3 +312,61 @@ class GameTest(unittest.TestCase):
         game.play_turn('a', Card.king, nominated_player='d')
         self.assertEqual(game.hands['a'], Card.princess)
         self.assertEqual(game.hands['d'], Card.guard)
+
+    def check_countess(self, prince_or_king):
+        """ A very basic test that having the prince or the king in a player's
+            hand together with the countess forces that player to discard the
+            countess.
+        """
+        self.assertIn(prince_or_king, [Card.prince, Card.king])
+        deck = [ Card.countess, # player a is dealt this card.
+                 Card.guard, # player b dealt
+                 Card.guard, # player c dealt
+                 Card.baron, # player d dealt
+                 prince_or_king # player a draws this card
+                 ]
+        players = ['a', 'b', 'c', 'd']
+        game = Game(players, deck=deck)
+        # Player a draws a prince and attempts to play it, but cannot because
+        # they have the countess.
+        with self.assertRaises(CountessForcedException):
+            game.play_turn('a', prince_or_king, nominated_player='d')
+        # So they instead discard the countess
+        game.play_turn('a', Card.countess)
+        self.assertEqual(game.hands['a'], prince_or_king)
+        self.assertEqual(['b', 'c', 'd', 'a'], game.players)
+
+    def test_countess(self):
+        self.check_countess(Card.prince)
+        self.check_countess(Card.king)
+
+    def test_princess(self):
+        deck = [ Card.princess, # player a is dealt this card
+                 Card.guard, # player b is dealt this card
+                 Card.prince, # player c dealt
+                 Card.guard, # player d
+                 Card.baron, # player a draws this card
+                 ]
+        players = ['a', 'b', 'c', 'd']
+        # The simplest case, player 'a' is dealt the princess and discards it
+        # immediately, it might be that we should stop someone doing something
+        # obviously stupid, but for now we just follow the rules:
+        game = Game(players, deck=deck)
+        game.play_turn('a', Card.princess)
+        self.assertNotIn('a', game.players)
+
+        # Now we do a more interesting example in which a player is forced to
+        # discard the princess via a prince card.
+        deck = [ Card.prince, # player a is dealt this card
+                 Card.guard, # player b is dealt this card
+                 Card.princess, # player c dealt
+                 Card.guard, # player d
+                 Card.baron, # player a draws this card
+                 ]
+        players = ['a', 'b', 'c', 'd']
+        game = Game(players, deck=deck)
+        # So player 'a' princes player 'c' and forces them to discard the
+        # princess
+        game.play_turn('a', Card.prince, nominated_player='c')
+        self.assertNotIn('c', game.players)
+        self.assertNotEqual('c', game.on_turn[0])
