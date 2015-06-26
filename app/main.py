@@ -20,12 +20,16 @@ card_pack = [Card.princess, Card.countess, Card.king, Card.prince,
              Card.priest, Card.priest,
              Card.guard, Card.guard, Card.guard, Card.guard, Card.guard]
 
-def create_random_deck():
-    return random.sample(card_pack, len(card_pack) - 1)
-
 class CountessForcedException(Exception):
     """ An exception to be raised whenever a player attempts to play a king or
         a prince when holding on to the Countess
+    """
+    pass
+
+class NoNominatedPlayerException(Exception):
+    """ An exception to raise whenever a player attempts to play a card for
+        which an nominated opponent is required but they have not nominated
+        a player.
     """
     pass
 
@@ -53,8 +57,20 @@ class Move(object):
 
 
 class Game(object):
-    def __init__(self, players, deck=None):
-        self.deck = deck if deck is not None else create_random_deck()
+    def __init__(self, players, deck=None, discarded=None):
+        if deck is None:
+            # If we are not setting the deck then we assume that we are wanting
+            # a random deck so we randomly shuffle the cards and choose a random
+            # one as the discarded.
+            self.deck = random.sample(card_pack, len(card_pack))
+            self.discarded = self.deck.pop(0)
+        else:
+            # If we are setting the deck we assume that we are in a test mode
+            # so we set the known deck and either we know that our test does
+            # not need a discarded card or we want to know what it is.
+            self.deck = deck
+            self.discarded = discarded
+
         self.players = players
         self.handmaided = set()
         # Begin the game by dealing a card to each player
@@ -87,8 +103,58 @@ class Game(object):
     def is_game_finished(self):
         return (not self.deck) or len(self.players) <= 1
 
+    def _available_moves_for_card(self, player, card, other_card):
+        """ Return the moves available for the first given card. The second
+            given card is only included so that the countess rules can be
+            applied to the prince and king cards, but note we are not
+            considering any moves playable by the second given card.
+        """
+        if card in [Card.prince, Card.king] and other_card == Card.countess:
+            # It may seem strange that we do not return the countess move but
+            # that should be returned by the other call to this method.
+            return []
+        elif card == Card.guard:
+            # You cannot guard a guard. You can guess any other card, here we
+            # do not prevent you from being stupid and guessing something that
+            # has already been discarded.
+            guessable_cards = list(Card)
+            guessable_cards.remove(Card.guard)
+            open_players = [p for p in self.players if p not in self.handmaided]
+            if open_players:
+                return [Move(player, card, nominated_player=p, nominated_card=c)
+                        for p in open_players for c in guessable_cards]
+            else:
+                # All opponents are handmaided, but you can discard the guard.
+                return [Move(player, card)]
+        elif card in [Card.priest, Card.baron, Card.king]:
+            # If all other players are handmaided you can simply discard the
+            # card. This means that you cannot choose to discard these cards
+            # if not all remaining players are handmaided, which would be useful
+            # if you for example have two barons, or a king and the princess.
+            open_players = [p for p in self.players if p not in self.handmaided]
+            if not open_players:
+                return [Move(player, card)]
+            return [Move(player, card, nominated_player=p)
+                    for p in open_players]
+        elif card == Card.prince:
+            # Slightly different from the priest, baron and king above
+            # in that you must always prince someone and that someone can
+            # always be you.
+            open_players = [p for p in self.players if p not in self.handmaided]
+            return [Move(player, card, nominated_player=p)
+                    for p in [player] + open_players]
+        elif card in [Card.handmaid, Card.countess, Card.princess]:
+            # You can always play any of these three cards, of course playing
+            # the princess will lose you the game.
+            return [Move(player, card)]
+        raise Exception("Invalid card for available moves.")
+
     def available_moves(self):
-        return []
+        player, card_one, card_two = self.on_turn
+        moves = self._available_moves_for_card(player, card_one, card_two)
+        if card_one != card_two:
+            moves += self._available_moves_for_card(player, card_two, card_one)
+        return moves
 
     def play_turn(self, move):
         who = move.player
@@ -117,6 +183,7 @@ class Game(object):
             for l in discard_logs:
                 self.log.append(l)
 
+        all_opponents_handmaided = all(p in self.handmaided for p in self.players)
 
         if player != who:
             raise Exception("It's not your turn: " + player + " " + str(self.players))
@@ -127,59 +194,76 @@ class Game(object):
         # If the player is handmaided, they are now not handmaided.
         self.handmaided.discard(player)
 
+
         if card == Card.guard:
             if nominated_player is None:
-                raise Exception("You have to nominate a player to play the guard")
-            if nominated_card is None:
+                if all_opponents_handmaided:
+                    # That's fine then, we just discard the card and carry on
+                    # We possibly should also check that the nominated card is
+                    # also None.
+                    pass
+                else:
+                    raise NoNominatedPlayerException("You must nominated a player")
+            elif nominated_player not in self.players:
+                raise Exception("You cannot guard someone already out of the game")
+            elif nominated_card is None:
                 raise Exception("You have to nominate a card to play the guard")
-            if nominated_card == Card.guard:
+            elif nominated_card == Card.guard:
                 raise Exception("You cannot guard a guard")
-            if nominated_player in self.handmaided:
+            elif nominated_player in self.handmaided:
                 raise Exception("You cannot guard a handmaided player.")
-            nominated_players_card = self.hands[nominated_player]
-            if nominated_card == nominated_players_card:
-                # Nominated player is out of the game
-                self.players.remove(nominated_player)
+            else:
+                nominated_players_card = self.hands[nominated_player]
+                if nominated_card == nominated_players_card:
+                    # Nominated player is out of the game
+                    self.players.remove(nominated_player)
 
-        if card == Card.baron:
+        elif card == Card.baron:
             if nominated_player is None:
-                raise Exception("You have to nominate a player to play the baron.")
-            if nominated_player not in self.players:
+                if all_opponents_handmaided:
+                    # That's fine then, we just discard the card and carry on
+                    # We possibly should also check that the nominated card is
+                    # also None.
+                    pass
+                else:
+                    raise NoNominatedPlayerException("You must nominated a player")
+            elif nominated_player not in self.players:
                 raise Exception("You have to baron against a player still in the game.")
-            if nominated_player in self.handmaided:
+            elif nominated_player in self.handmaided:
                 raise Exception("You cannot baron a handmaided player.")
-            opponents_card = self.hands[nominated_player]
-            if kept_card > opponents_card:
-                self.players.remove(nominated_player)
-            elif opponents_card > kept_card:
-                # Do nothing, but the current player is out of the game so we
-                # return without placing the current player in players list
-                # but we do log the play though.
-                log_play()
-                return
-            # If the cards are equal nothing happens.
+            else:
+                opponents_card = self.hands[nominated_player]
+                if kept_card > opponents_card:
+                    self.players.remove(nominated_player)
+                elif opponents_card > kept_card:
+                    # Do nothing, but the current player is out of the game so we
+                    # return without placing the current player in players list
+                    # but we do log the play though.
+                    log_play()
+                    return
+                # If the cards are equal nothing happens.
 
-        if card == Card.handmaid:
+        elif card == Card.handmaid:
             self.handmaided.add(player)
 
-        if card == Card.prince:
+        elif card == Card.prince:
             if kept_card == Card.countess:
                 raise CountessForcedException("You must discard the countess if you have a prince")
             elif nominated_player is None:
-                raise Exception("You have to nominate a player to play the prince.")
-            if nominated_player not in [player] + self.players:
+                raise NoNominatedPlayerException("You must nominated a player")
+            elif nominated_player not in [player] + self.players:
                 raise Exception("You have to prince against a player still in the game.")
-            if nominated_player in self.handmaided:
+            elif nominated_player in self.handmaided:
                 raise Exception("You cannot prince a handmaided player.")
             # Note: unlike the king below you cannot simply discard the prince,
             # if all other players are handmaided you have to prince yourself.
-            if nominated_player == player:
+            elif nominated_player == player:
                 if kept_card == Card.princess:
                     # Oh oh, you're out of the game! Return without placing the
                     # current player in player list.
                     log_play()
                     return
-                new_card = self.take_top_card()
+                new_card = self.take_top_card() if self.deck else self.discarded
                 discard_logs.append(player + ":" + str(new_card.value))
                 kept_card = new_card
             else:
@@ -189,11 +273,11 @@ class Game(object):
                     self.players.remove(nominated_player)
                 else:
                     # Otherwise give them a new card.
-                    new_card = self.take_top_card()
+                    new_card = self.take_top_card() if self.deck else self.discarded
                     discard_logs.append(nominated_player + ":" + str(new_card.value))
                     self.hands[nominated_player] = new_card
 
-        if card == Card.king:
+        elif card == Card.king:
             # Note, if you are forced to swap the princess I don't think this
             # counts as discarding it, so you're not out, so we do not check
             # for that here.
@@ -201,12 +285,12 @@ class Game(object):
             if kept_card == Card.countess:
                 raise CountessForcedException("You must discard the countess if you have a king")
             elif nominated_player is None:
-                if all(p in self.handmaided for p in self.players):
+                if all_opponents_handmaided:
                     # Okay so fine there is no-one you can play the king against
                     # hence it becomes a simple discard.
                     pass
                 else:
-                    raise Exception("You have to nominate a player to play the king")
+                    raise NoNominatedPlayerException("You must nominated a player")
             elif nominated_player not in self.players:
                 raise Exception("You have to king against a player still in the game.")
             elif nominated_player in self.handmaided:
@@ -215,14 +299,14 @@ class Game(object):
                 opponents_card = self.hands[nominated_player]
                 kept_card, self.hands[nominated_player] = opponents_card, kept_card
 
-        if card == Card.countess:
+        elif card == Card.countess:
             # This is fine, we need to check above that a player never manages
             # to avoid discarding the countess when they hold the prince or the
             # king, but discarding the countess is always fine, but has no
             # effect.
             pass
 
-        if card == Card.princess:
+        elif card == Card.princess:
             # The player is out, so do not append them to the back of the
             # players list.
             log_play()
@@ -433,8 +517,27 @@ class GameTest(unittest.TestCase):
                         "c,5,c,\n"
                         "c:6")
         self.assertEqual(game.serialise_game(), expected_log)
-
-
+        # In another test we make sure that if you attempt to prince someone
+        # on the last turn, when there are no cards left we make sure that the
+        # card to be taken by the player is the originally discarded card.
+        deck = [ Card.prince, # player a is dealt this card
+                 Card.guard, # player b is dealt this card
+                 Card.prince, # player c is dealt this card
+                 Card.guard, # player d is dealt this card
+                 Card.guard, # player a draws this card
+                ]
+        players = ['a', 'b', 'c', 'd']
+        game = Game(players, deck=deck, discarded=Card.princess)
+        game.play_turn(Move('a', Card.prince, nominated_player='b'))
+        self.assertEqual(game.hands['b'], Card.princess) 
+        expected_log = ("a:5\n"
+                        "b:1\n"
+                        "c:5\n"
+                        "d:1\n\n"
+                        "a:1\n"
+                        "a,5,b,\n"
+                        "b:8")
+        self.assertEqual(game.serialise_game(), expected_log)
 
     def test_king(self):
         deck = [ Card.king, # player a is dealt this card
@@ -456,6 +559,48 @@ class GameTest(unittest.TestCase):
                         "a,6,d,")
         self.assertEqual(game.serialise_game(), expected_log)
 
+    def check_handmaid_discard(self, discard):
+        """ For the cards guard, priest, baron, and king if all other players
+            are handmaided then you are able to simply discard the card. This
+            checks that that is indeed possible.
+        """
+        deck = [ Card.handmaid, # player a is dealt this card.
+                 Card.handmaid, # player b dealt
+                 Card.handmaid, # player c dealt
+                 discard, # player d dealt
+                 Card.guard, # player a draws this card
+                 Card.guard, # player b draws this card
+                 Card.guard, # player c draws this card
+                 Card.princess, # player d draws this card
+                 ]
+        players = ['a', 'b', 'c', 'd']
+        game = Game(players, deck=deck)
+        game.play_turn(Move('a', Card.handmaid))
+        game.draw_card()
+        game.play_turn(Move('b', Card.handmaid))
+        game.draw_card()
+        game.play_turn(Move('c', Card.handmaid))
+        game.draw_card()
+        game.play_turn(Move('d', discard))
+        self.assertEqual(['a', 'b', 'c', 'd'], game.players)
+        expected_log = ("a:4\n"
+                        "b:4\n"
+                        "c:4\n"
+                        "d:{0}\n\n"
+                        "a:1\n"
+                        "a,4,,\n"
+                        "b:1\n"
+                        "b,4,,\n"
+                        "c:1\n"
+                        "c,4,,\n"
+                        "d:8\n"
+                        "d,{0},,").format(str(discard.value))
+        self.assertEqual(game.serialise_game(), expected_log)
+
+
+    def test_handmaid_dicard(self):
+        for card in [Card.guard, Card.priest, Card.baron, Card.king]:
+            self.check_handmaid_discard(card)
 
     def check_countess(self, prince_or_king):
         """ A very basic test that having the prince or the king in a player's
