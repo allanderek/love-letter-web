@@ -21,11 +21,17 @@ card_pack = [Card.princess, Card.countess, Card.king, Card.prince,
              Card.guard, Card.guard, Card.guard, Card.guard, Card.guard]
 
 def create_random_deck():
-    return random.sample(default_deck, len(card_pack) - 1)
+    return random.sample(card_pack, len(card_pack) - 1)
 
 class CountessForcedException(Exception):
     """ An exception to be raised whenever a player attempts to play a king or
         a prince when holding on to the Countess
+    """
+    pass
+
+class GameFinished(Exception):
+    """ An exception to raise when the game is over, this is because there
+        is either only one player left or there are no cards to draw.
     """
     pass
 
@@ -52,11 +58,20 @@ class Game(object):
         return self.deck.pop(0)
 
     def draw_card(self):
-        player = self.players.pop(0)
-        card = self.hands[player]
-        new_card = self.take_top_card()
-        self.on_turn = player, card, new_card
-        self.log.append(player + ":" + str(new_card.value))
+        if self.deck and len(self.players) > 1:
+            player = self.players.pop(0)
+            card = self.hands[player]
+            new_card = self.take_top_card()
+            self.on_turn = player, card, new_card
+            self.log.append(player + ":" + str(new_card.value))
+        else:
+            raise GameFinished()
+
+    def is_game_finished(self):
+        return (not self.deck) or len(self.players) <= 1
+
+    def available_moves(self):
+        return []
 
     def play_turn(self, who, card, nominated_player=None, nominated_card=None):
         # In theory we should set self.on_turn to None, but we back-out of some
@@ -498,3 +513,20 @@ class GameTest(unittest.TestCase):
         game.play_turn('a', Card.prince, nominated_player='c')
         self.assertNotIn('c', game.players)
         self.assertNotEqual('c', game.on_turn[0])
+
+class SelfConsistency(unittest.TestCase):
+    """ In this test class we simply run several iterations of the game and
+        we should get no exceptions being raised for illegal moves because
+        we should only be choosing from those we are given.
+    """
+    def play_test_game(self):
+        players = ['a', 'b', 'c', 'd']
+        game = Game(players)
+        while not game.is_game_finished():
+            game.draw_card()
+            possible_moves = game.available_moves()
+            game.play_turn(random.choice(possible_moves))
+
+    def test_game(self):
+        for _ in range(100):
+            self.play_test_game()
