@@ -43,7 +43,7 @@ class Game(object):
         self.draw_card()
 
     def serialise_game(self):
-        result = "\n".join([p + " : " + str(c) for (p,c) in self.deal])
+        result = "\n".join([p + ":" + str(c.value) for (p,c) in self.deal])
         result += "\n\n"
         result += "\n".join(self.log)
         return result
@@ -56,6 +56,7 @@ class Game(object):
         card = self.hands[player]
         new_card = self.take_top_card()
         self.on_turn = player, card, new_card
+        self.log.append(player + ":" + str(new_card.value))
 
     def play_turn(self, who, card, nominated_player=None, nominated_card=None):
         # In theory we should set self.on_turn to None, but we back-out of some
@@ -169,6 +170,10 @@ class Game(object):
             # players list.
             return
 
+        log_nominated_player = '' if nominated_player is None else nominated_player
+        log_nominated_card = '' if nominated_card is None else str(nominated_card.value)
+        log_entry = ",".join([player, str(card.value), log_nominated_player, log_nominated_card])
+        self.log.append(log_entry)
         self.hands[player] = kept_card
         self.players.append(player)
 
@@ -196,16 +201,16 @@ class GameTest(unittest.TestCase):
         game.draw_card()
         game.play_turn('a', Card.guard, nominated_player='c', nominated_card=Card.baron)
         self.assertEqual(game.players, ['a'])
-        expected_log = ("a : 1\n"
-                        "b : 2\n"
-                        "c : 1\n"
-                        "d : 2\n\n"
-                        "a : 1\n"
+        expected_log = ("a:1\n"
+                        "b:2\n"
+                        "c:1\n"
+                        "d:2\n\n"
+                        "a:1\n"
                         "a,1,b,2\n"
                         "c:3\n"
                         "c,1,d,2\n"
                         "a:3\n"
-                        "a,1,c,3\n")
+                        "a,1,c,3")
         self.assertEqual(game.serialise_game(), expected_log)
 
     def test_baron(self):
