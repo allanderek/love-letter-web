@@ -1,4 +1,5 @@
 from enum import IntEnum
+from collections import namedtuple
 import random
 
 import unittest
@@ -14,13 +15,13 @@ class Card(IntEnum):
     priest = 2
     guard = 1
 
-default_deck = [Card.princess, Card.countess, Card.king, Card.prince,
-                Card.handmaid, Card.handmaid, Card.baron, Card.baron,
-                Card.priest, Card.priest,
-                Card.guard, Card.guard, Card.guard, Card.guard, Card.guard]
+card_pack = [Card.princess, Card.countess, Card.king, Card.prince,
+             Card.handmaid, Card.handmaid, Card.baron, Card.baron,
+             Card.priest, Card.priest,
+             Card.guard, Card.guard, Card.guard, Card.guard, Card.guard]
 
 def create_random_deck():
-    return random.sample(default_deck, len(default_deck) - 1)
+    return random.sample(default_deck, len(card_pack) - 1)
 
 class CountessForcedException(Exception):
     """ An exception to be raised whenever a player attempts to play a king or
@@ -33,8 +34,19 @@ class Game(object):
         self.deck = deck if deck is not None else create_random_deck()
         self.players = players
         self.handmaided = set()
-        self.hands = {x: self.deck.pop(0) for x in self.players}
+        # Begin the game by dealing a card to each player
+        self.deal = [(p, self.deck.pop(0)) for p in self.players]
+        self.hands = {p:c for (p,c) in self.deal}
+        self.log = []
+
+        # Start the game by having the first player draw a card.
         self.draw_card()
+
+    def serialise_game(self):
+        result = "\n".join([p + " : " + str(c) for (p,c) in self.deal])
+        result += "\n\n"
+        result += "\n".join(self.log)
+        return result
 
     def take_top_card(self):
         return self.deck.pop(0)
@@ -184,6 +196,17 @@ class GameTest(unittest.TestCase):
         game.draw_card()
         game.play_turn('a', Card.guard, nominated_player='c', nominated_card=Card.baron)
         self.assertEqual(game.players, ['a'])
+        expected_log = ("a : 1\n"
+                        "b : 2\n"
+                        "c : 1\n"
+                        "d : 2\n\n"
+                        "a : 1\n"
+                        "a,1,b,2\n"
+                        "c:3\n"
+                        "c,1,d,2\n"
+                        "a:3\n"
+                        "a,1,c,3\n")
+        self.assertEqual(game.serialise_game(), expected_log)
 
     def test_baron(self):
         """ This simply tests that the baron can knock a player out. We check
