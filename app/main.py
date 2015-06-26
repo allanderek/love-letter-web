@@ -231,6 +231,15 @@ class GameTest(unittest.TestCase):
         game.draw_card()
         game.play_turn('c', Card.baron, nominated_player='d')
         self.assertEqual(game.players, ['d', 'a'])
+        expected_log = ("a:3\n"
+                        "b:2\n"
+                        "c:3\n"
+                        "d:7\n\n"
+                        "a:5\n"
+                        "a,3,b,\n"
+                        "c:5\n"
+                        "c,3,d,")
+        self.assertEqual(game.serialise_game(), expected_log)
         deck = [ Card.baron, # player a is dealt this card
                  Card.priest, # player b is dealt this card
                  Card.baron, # player c is dealt this card
@@ -243,6 +252,14 @@ class GameTest(unittest.TestCase):
         game.play_turn('a', Card.baron, nominated_player='d')
         # Both a and d still in the game due to the drawn baron showdown.
         self.assertEqual(game.players, ['b', 'c', 'd', 'a'])
+        expected_log = ("a:3\n"
+                        "b:2\n"
+                        "c:3\n"
+                        "d:5\n\n"
+                        "a:5\n"
+                        "a,3,d,")
+        self.assertEqual(game.serialise_game(), expected_log)
+
 
     def test_handmaid(self):
         """ There is actually no real test to do on the handmaid, if the
@@ -300,6 +317,24 @@ class GameTest(unittest.TestCase):
         self.assertEqual(['d', 'a'], game.players)
         self.assertEqual(Card.prince, game.hands['a'])
         self.assertEqual(Card.countess, game.hands['d'])
+        expected_log = ("a:4\n"
+                        "b:3\n"
+                        "c:1\n"
+                        "d:7\n\n"
+                        "a:5\n"
+                        "a,4,,\n"
+                        "b:5\n"
+                        "b,3,c,\n"
+                        "d:1\n"
+                        "d,1,b,5\n"
+                        "a:1\n"
+                        "a,1,d,8\n"
+                        "d:4\n"
+                        "d,4,,\n"
+                        "a:6\n"
+                        "a,6,,")
+        self.assertEqual(game.serialise_game(), expected_log)
+
 
     def test_prince(self):
         """ This tests the prince has the desired effect, we will also check
@@ -322,11 +357,28 @@ class GameTest(unittest.TestCase):
         self.assertEqual(game.hands['b'], Card.princess)
         game.draw_card()
         game.play_turn('b', Card.countess)
+
+        # c draws a card and we check that they are able to prince themselves.
         game.draw_card()
         game.play_turn('c', Card.prince, nominated_player='c')
-        # So now 'b' should still have the prince and 'c' should have a king.
+        # So now 'b' should still have the princess and 'c' should have a king.
         self.assertEqual(game.hands['b'], Card.princess)
         self.assertEqual(game.hands['c'], Card.king)
+        self.assertEqual(game.players, ['d', 'a', 'b', 'c'])
+        expected_log = ("a:5\n"
+                        "b:1\n"
+                        "c:5\n"
+                        "d:1\n\n"
+                        "a:1\n"
+                        "a,5,b,\n"
+                        "b:8\n"
+                        "b:7\n"
+                        "b,7,,\n"
+                        "c:4\n"
+                        "c,5,c,")
+        self.assertEqual(game.serialise_game(), expected_log)
+
+
 
     def test_king(self):
         deck = [ Card.king, # player a is dealt this card
@@ -340,6 +392,14 @@ class GameTest(unittest.TestCase):
         game.play_turn('a', Card.king, nominated_player='d')
         self.assertEqual(game.hands['a'], Card.princess)
         self.assertEqual(game.hands['d'], Card.guard)
+        expected_log = ("a:6\n"
+                        "b:1\n"
+                        "c:5\n"
+                        "d:8\n\n"
+                        "a:1\n"
+                        "a,6,d,")
+        self.assertEqual(game.serialise_game(), expected_log)
+
 
     def check_countess(self, prince_or_king):
         """ A very basic test that having the prince or the king in a player's
@@ -363,6 +423,14 @@ class GameTest(unittest.TestCase):
         game.play_turn('a', Card.countess)
         self.assertEqual(game.hands['a'], prince_or_king)
         self.assertEqual(['b', 'c', 'd', 'a'], game.players)
+        expected_log = ("a:7\n"
+                        "b:1\n"
+                        "c:1\n"
+                        "d:3\n\n"
+                        "a:{0}\n"
+                        "a,7,,").format(str(prince_or_king.value))
+        self.assertEqual(game.serialise_game()(), expected_log)
+
 
     def test_countess(self):
         self.check_countess(Card.prince)
@@ -382,6 +450,15 @@ class GameTest(unittest.TestCase):
         game = Game(players, deck=deck)
         game.play_turn('a', Card.princess)
         self.assertNotIn('a', game.players)
+        expected_log = ("a:8\n"
+                        "b:1\n"
+                        "c:5\n"
+                        "d:1\n\n"
+                        "a:3\n"
+                        "a,8,,")
+        self.assertEqual(game.serialise_game(), expected_log)
+
+
 
         # Now we do a more interesting example in which a player is forced to
         # discard the princess via a prince card.
