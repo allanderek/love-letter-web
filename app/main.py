@@ -66,6 +66,25 @@ class Game(object):
         # inspecting self.players does not quite do.
         player, card_one, card_two = self.on_turn
 
+        # Some cards force others to discard their cards, possibly by being
+        # out of the game. The prince forces you to discard and pickup, but we
+        # do not want to log these events as occuring *before* the current play.
+        # So we store them up and then log them only after the current play is
+        # logged.
+        discard_logs = []
+
+        def log_play():
+            """ We define this as a method rather than simply doing this now,
+                because we may back out of this if the move is not valid.
+            """
+            log_nominated_player = '' if nominated_player is None else nominated_player
+            log_nominated_card = '' if nominated_card is None else str(nominated_card.value)
+            log_entry = ",".join([player, str(card.value), log_nominated_player, log_nominated_card])
+            self.log.append(log_entry)
+            for l in discard_logs:
+                self.log.append(l)
+
+
         if player != who:
             raise Exception("It's not your turn: " + player + " " + str(self.players))
         if card not in [card_one, card_two]:
@@ -102,6 +121,8 @@ class Game(object):
             elif opponents_card > kept_card:
                 # Do nothing, but the current player is out of the game so we
                 # return without placing the current player in players list
+                # but we do log the play though.
+                log_play()
                 return
             # If the cards are equal nothing happens.
 
@@ -122,9 +143,11 @@ class Game(object):
             if nominated_player == player:
                 if kept_card == Card.princess:
                     # Oh oh, you're out of the game! Return without placing the
-                    # current player in player list
+                    # current player in player list.
+                    log_play()
                     return
                 new_card = self.take_top_card()
+                discard_logs.append(player + ":" + str(new_card.value))
                 kept_card = new_card
             else:
                 if self.hands[nominated_player] == Card.princess:
@@ -134,6 +157,7 @@ class Game(object):
                 else:
                     # Otherwise give them a new card.
                     new_card = self.take_top_card()
+                    discard_logs.append(nominated_player + ":" + str(new_card.value))
                     self.hands[nominated_player] = new_card
 
         if card == Card.king:
@@ -168,12 +192,10 @@ class Game(object):
         if card == Card.princess:
             # The player is out, so do not append them to the back of the
             # players list.
+            log_play()
             return
 
-        log_nominated_player = '' if nominated_player is None else nominated_player
-        log_nominated_card = '' if nominated_card is None else str(nominated_card.value)
-        log_entry = ",".join([player, str(card.value), log_nominated_player, log_nominated_card])
-        self.log.append(log_entry)
+        log_play()
         self.hands[player] = kept_card
         self.players.append(player)
 
@@ -375,7 +397,8 @@ class GameTest(unittest.TestCase):
                         "b:7\n"
                         "b,7,,\n"
                         "c:4\n"
-                        "c,5,c,")
+                        "c,5,c,\n"
+                        "c:6")
         self.assertEqual(game.serialise_game(), expected_log)
 
 
@@ -429,7 +452,7 @@ class GameTest(unittest.TestCase):
                         "d:3\n\n"
                         "a:{0}\n"
                         "a,7,,").format(str(prince_or_king.value))
-        self.assertEqual(game.serialise_game()(), expected_log)
+        self.assertEqual(game.serialise_game(), expected_log)
 
 
     def test_countess(self):
