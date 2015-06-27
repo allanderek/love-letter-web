@@ -57,31 +57,69 @@ class Move(object):
 
 
 class Game(object):
-    def __init__(self, players, deck=None, discarded=None):
-        if deck is None:
-            # If we are not setting the deck then we assume that we are wanting
-            # a random deck so we randomly shuffle the cards and choose a random
-            # one as the discarded.
-            self.deck = random.sample(card_pack, len(card_pack))
-            self.discarded = self.deck.pop(0)
-        else:
-            # If we are setting the deck we assume that we are in a test mode
-            # so we set the known deck and either we know that our test does
-            # not need a discarded card or we want to know what it is.
-            self.deck = deck
-            self.discarded = discarded
-
+    def __init__(self, players, deck=None, discarded=None, log=None):
         self.players = players
         self.handmaided = set()
-        # Begin the game by dealing a card to each player
-        self.deal = [(p, self.deck.pop(0)) for p in self.players]
-        self.hands = {p:c for (p,c) in self.deal}
         self.log = []
         self.winners = None
         self.winning_card = None
 
-        # Start the game by having the first player draw a card.
-        self.draw_card()
+        if log is None:
+            if deck is None:
+                # If we are not setting the deck then we assume that we are wanting
+                # a random deck so we randomly shuffle the cards and choose a random
+                # one as the discarded.
+                self.deck = card_pack.copy()
+                random.shuffle(self.deck)
+                self.discarded = self.deck.pop(0)
+            else:
+                # If we are setting the deck we assume that we are in a test mode
+                # so we set the known deck and either we know that our test does
+                # not need a discarded card or we want to know what it is.
+                self.deck = deck
+                self.discarded = discarded
+
+            # Begin the game by dealing a card to each player
+            self.deal = [(p, self.deck.pop(0)) for p in self.players]
+            self.hands = {p:c for (p,c) in self.deal}
+        else:
+            log_lines = log.split("\n")
+            self.deal = [self.parse_drawcard(l) for l in log_lines[:4]]
+            self.hands = {p:c for (p,c) in self.deal}
+            deck_lines = [self.parse_drawcard(l)
+                          for l in log_lines[5:] if ':' in l]
+            play_lines = [self.parse_action(l) for l in log_lines if ',' in l]
+
+            self.deck = [c for _, c in deck_lines]
+
+            rest_of_deck = card_pack.copy()
+            for c in self.deck:
+                rest_of_deck.remove(c)
+            for c in self.hands.values():
+                rest_of_deck.remove(c)
+            random.shuffle(rest_of_deck)
+            # It is possible there is no discarded because all the cards were
+            # used up. This would happen if we are loading the log of a game
+            # that finished with someone playing the prince forcing someone else
+            # to take the discarded. So we have to check that the rest of the
+            # deck is not empty.
+            if rest_of_deck:
+                self.discarded = rest_of_deck.pop()
+            self.deck += rest_of_deck
+            for move in play_lines:
+                self.draw_card()
+                self.play_turn(move)
+
+    def parse_drawcard(self, line):
+        return (line[0], Card(int(line[2])))
+
+    def parse_action(self, line):
+        fields = line.split(",")
+        card = Card(int(fields[1]))
+        nom_player = None if fields[2] == '' else fields[2]
+        nom_card = None if fields[3] == '' else Card(int(fields[3]))
+        return Move(fields[0], card,
+                    nominated_player=nom_player, nominated_card=nom_card)
 
     def serialise_game(self):
         result = "\n".join([p + ":" + str(c.value) for (p,c) in self.deal])
@@ -92,13 +130,17 @@ class Game(object):
     def take_top_card(self):
         return self.deck.pop(0)
 
-    def draw_card(self):
-        if self.deck and len(self.players) > 1:
+    def draw_card(self, card=None):
+        """ You can draw a known card, this is useful for restoring a game from
+            a log.
+        """
+        if card is None and self.deck and len(self.players) > 1:
+            card = self.take_top_card()
+        if card is not None:
             player = self.players.pop(0)
-            card = self.hands[player]
-            new_card = self.take_top_card()
-            self.on_turn = player, card, new_card
-            self.log.append(player + ":" + str(new_card.value))
+            old_card = self.hands[player]
+            self.on_turn = player, old_card, card
+            self.log.append(player + ":" + str(card.value))
         else:
             raise GameFinished()
 
@@ -191,7 +233,8 @@ class Game(object):
         all_opponents_handmaided = all(p in self.handmaided for p in self.players)
 
         if player != who:
-            raise Exception("It's not your turn: " + player + " " + str(self.players))
+            raise Exception("It's not your turn: {0} != {1}, {2}".format(
+                            player, who, str(self.players)))
         if card not in [card_one, card_two]:
             raise Exception("Illegal attempt to play a card you do not have.")
         kept_card = card_two if card == card_one else card_one
@@ -378,6 +421,7 @@ class GameTest(unittest.TestCase):
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
+        game.draw_card()
         game.play_turn(Move('a', Card.guard, nominated_player='b', nominated_card=Card.priest))
         game.draw_card()
         game.play_turn(Move('c', Card.guard, nominated_player='d', nominated_card=Card.priest))
@@ -413,6 +457,7 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
+        game.draw_card()
         game.play_turn(Move('a', Card.baron, nominated_player='b'))
         game.draw_card()
         game.play_turn(Move('c', Card.baron, nominated_player='d'))
@@ -437,6 +482,7 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
+        game.draw_card()
         game.play_turn(Move('a', Card.baron, nominated_player='d'))
         # Both a and d still in the game due to the drawn baron showdown.
         self.assertEqual(game.players, ['b', 'c', 'd', 'a'])
@@ -470,6 +516,7 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
+        game.draw_card()
         game.play_turn(Move('a', Card.handmaid))
         self.assertEqual(set(['a']), game.handmaided)
         game.draw_card()
@@ -542,6 +589,7 @@ class GameTest(unittest.TestCase):
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
+        game.draw_card()
         game.play_turn(Move('a', Card.prince, nominated_player='b'))
         # Assert that 'b' now has the princess not the guard they were dealt.
         self.assertEqual(game.hands['b'], Card.princess)
@@ -583,6 +631,7 @@ class GameTest(unittest.TestCase):
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck, discarded=Card.princess)
+        game.draw_card()
         game.play_turn(Move('a', Card.prince, nominated_player='b'))
         self.assertEqual(game.hands['b'], Card.princess)
         expected_log = ("a:5\n"
@@ -604,6 +653,7 @@ class GameTest(unittest.TestCase):
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
+        game.draw_card()
         game.play_turn(Move('a', Card.king, nominated_player='d'))
         self.assertEqual(game.hands['a'], Card.princess)
         self.assertEqual(game.hands['d'], Card.guard)
@@ -631,6 +681,7 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
+        game.draw_card()
         game.play_turn(Move('a', Card.handmaid))
         game.draw_card()
         game.play_turn(Move('b', Card.handmaid))
@@ -677,6 +728,7 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
+        game.draw_card()
         # Player a draws a prince/king and attempts to play it, but cannot
         # because they have the countess.
         with self.assertRaises(CountessForcedException):
@@ -710,6 +762,7 @@ class GameTest(unittest.TestCase):
         # immediately, it might be that we should stop someone doing something
         # obviously stupid, but for now we just follow the rules:
         game = Game(players, deck=deck)
+        game.draw_card()
         game.play_turn(Move('a', Card.princess))
         self.assertNotIn('a', game.players)
         expected_log = ("a:8\n"
@@ -730,6 +783,7 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
+        game.draw_card()
         # So player 'a' princes player 'c' and forces them to discard the
         # princess
         game.play_turn(Move('a', Card.prince, nominated_player='c'))
@@ -780,7 +834,12 @@ class LoadingTest(SelfConsistency):
             limit = random.choice(range(len(card_pack)))
             game_one = self.play_test_game(limit=limit)
             log = game_one.serialise_game()
-            game_two = Game(log=log)
+            players = ['a', 'b', 'c', 'd']
+            try:
+                game_two = Game(players, log=log)
+            except Exception as e:
+                print(log)
+                raise e
             self.assertEqual(game_one.players, game_two.players)
             self.assertEqual(game_one.hands, game_two.hands)
             self.assertEqual(game_one.winners, game_two.winners)
