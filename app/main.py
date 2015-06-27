@@ -77,6 +77,8 @@ class Game(object):
         self.deal = [(p, self.deck.pop(0)) for p in self.players]
         self.hands = {p:c for (p,c) in self.deal}
         self.log = []
+        self.winners = None
+        self.winning_card = None
 
         # Start the game by having the first player draw a card.
         self.draw_card()
@@ -347,6 +349,16 @@ class Game(object):
         log_play()
         self.hands[player] = kept_card
         self.players.append(player)
+        if self.is_game_finished():
+            for p in self.players:
+                if self.winning_card is None:
+                    self.winning_card = self.hands[p]
+                    self.winners = set(p)
+                elif self.hands[p] > self.winning_card:
+                    self.winning_card = self.hands[p]
+                    self.winners = set(p)
+                elif self.hands[p] == self.winning_card:
+                    self.winners.add(p)
 
 class GameTest(unittest.TestCase):
     def test_guard_wins(self):
@@ -733,20 +745,42 @@ class GameTest(unittest.TestCase):
         self.assertEqual(game.serialise_game(), expected_log)
 
 
-
 class SelfConsistency(unittest.TestCase):
     """ In this test class we simply run several iterations of the game and
         we should get no exceptions being raised for illegal moves because
         we should only be choosing from those we are given.
     """
-    def play_test_game(self):
+    def play_test_game(self, limit=100):
         players = ['a', 'b', 'c', 'd']
         game = Game(players)
-        while not game.is_game_finished():
+        for _ in range(limit):
+            if game.is_game_finished():
+                break
             game.draw_card()
             possible_moves = game.available_moves()
             game.play_turn(random.choice(possible_moves))
+        return game
 
     def test_game(self):
         for _ in range(100):
             self.play_test_game()
+
+class LoadingTest(SelfConsistency):
+    """ The same as the self consistency test, except that we may end some
+        games before the game is over, and, more importantly, we check that
+        whenever we pause the game, we can extract the log, load the log into
+        a new game and get the same result.
+    """
+    def test_load(self):
+        for _ in range(100):
+            # Note that the initial deal is not actually counted in the
+            # limit of the moves so some games will have a high enough limit
+            # to finish the game. There would be some that did anyway on
+            # account of finishing through all but one player being out.
+            limit = random.choice(range(len(card_pack)))
+            game_one = self.play_test_game(limit=limit)
+            log = game_one.serialise_game()
+            game_two = Game(log=log)
+            self.assertEqual(game_one.players, game_two.players)
+            self.assertEqual(game_one.hands, game_two.hands)
+            self.assertEqual(game_one.winners, game_two.winners)
