@@ -26,17 +26,27 @@ class CountessForcedException(Exception):
     """
     pass
 
+
 class NoNominatedPlayerException(Exception):
-    """ An exception to raise whenever a player attempts to play a card for
-        which an nominated opponent is required but they have not nominated
-        a player.
+
+    """An exception to raise whenever a player does not nominate a player.
+
+    Some cards, namely, the guard, priest, baron, prince and king require that
+    you nominate a player (unless all other players are handmaided). This is
+    the exception to raise if a player fails to do so.
     """
+
     pass
 
+
 class GameFinished(Exception):
-    """ An exception to raise when the game is over, this is because there
-        is either only one player left or there are no cards to draw.
+
+    """An exception to raise when the game is over.
+
+    The game is over either because there is only a single player left,
+    or because there are no cards left to draw.
     """
+
     pass
 
 class Move(object):
@@ -54,7 +64,6 @@ class Move(object):
                               nom_player,
                               nom_card])
         return log_entry
-
 
 class Game(object):
     def __init__(self, players, deck=None, discarded=None, log=None):
