@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<pre>
+    {{game.serialise_game()}}
+</pre>
+
+{% if your_turn %}
+<ul>
+    {% for move in possible_moves %}
+        <li>{{move.to_log_string()}}</li>
+    {% endfor %}
+</ul>
+{% else %}
+It's not your turn.
+{% endif %}<!-- your_turn -->
+
+{% endblock %}

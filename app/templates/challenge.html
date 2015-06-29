@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="POST" action="{{ url_for('challenge') }}">
+    {{ form.csrf_token }}
+    {{ form.a_email.label }} {{ form.a_email(size=30) }}
+    {{ form.b_email.label }} {{ form.b_email(size=30) }}
+    {{ form.c_email.label }} {{ form.c_email(size=30) }}
+    {{ form.d_email.label }} {{ form.d_email(size=30) }}
+    <input id="send_challenge" type="submit" value="Send challenge">
+</form>
+{% endblock %}

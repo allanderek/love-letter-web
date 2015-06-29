@@ -6,13 +6,93 @@ import random
 import unittest
 
 import flask
+from flask import request, url_for
+import flask_wtf
+from wtforms import HiddenField, IntegerField, StringField
+from wtforms.validators import DataRequired, Email
+
 
 application = flask.Flask(__name__)
+application.secret_key = b'7a\xe1f\x17\xc9C\xcb*\x85\xc1\x95G\x97\x03\xa3D\xd3F\xcf\x03\xf3\x99>'
+
+
+class Database(object):
+    """A temporary mock database."""
+    def __init__(self):
+        self.games = dict()
+
+    class DBGame(object):
+        def __init__(self, game_id):
+            self.game_id = game_id
+            self.game = Game(['a', 'b', 'c', 'd'])
+            self.secrets = {random.getrandbits(48): p for p in self.game.players}
+            self.game.draw_card()
+
+        def is_player(self, secret):
+            return secret in self.secrets
+
+    def begin_game(self):
+        game_id = len(self.games)
+        db_game = self.DBGame(game_id)
+        self.games[game_id] = db_game
+        return db_game
+
+database = Database()
+
+
+def redirect_url(default='frontpage'):
+    """ A simple helper function to redirect the user back to where they came.
+
+        See: http://flask.pocoo.org/docs/0.10/reqcontext/ and also here:
+        http://stackoverflow.com/questions/14277067/redirect-back-in-flask
+    """
+
+    return request.args.get('next') or request.referrer or url_for(default)
 
 
 @application.route("/")
-def welcome():
-    return "Hello World!"
+def frontpage():
+    return flask.render_template('frontpage.html')
+
+
+class ChallengeForm(flask_wtf.Form):
+    a_email = StringField("P1's email", validators=[DataRequired(), Email()])
+    b_email = StringField("P2's email", validators=[DataRequired(), Email()])
+    c_email = StringField("P3's email", validators=[DataRequired(), Email()])
+    d_email = StringField("P4's email", validators=[DataRequired(), Email()])
+
+
+@application.route('/challenge', methods=('GET', 'POST'))
+def challenge():
+    form = ChallengeForm()
+    if form.validate_on_submit():
+        db_game = database.begin_game()
+        result = """Game started, four players:
+                    <ul>"""
+        for secret, player in db_game.secrets.items():
+            url = url_for('viewgame', game_no=db_game.game_id, secret=secret)
+            link = '<a href="{0}">View game player {1}</a>'.format(url, player)
+            result += "<li>" + link + "</li>"
+        result += "</ul>"
+        return result
+    return flask.render_template("challenge.html", form=form)
+
+@application.route('/viewgame/<int:game_no>/<int:secret>')
+def viewgame(game_no, secret):
+    db_game = database.games[game_no]
+    game = db_game.game
+    try:
+        player = db_game.secrets[secret]
+    except KeyError:
+        flask.flash("You are not in this game! Secret key invalid.")
+        player ='' # This way it won't be this player's turn.
+    if game.on_turn[0] == player:
+        possible_moves = game.available_moves()
+        return flask.render_template('viewgame.html', game=game,
+                                     your_turn=True, possible_moves=possible_moves)
+    else:
+        return flask.render_template('viewgame.html', game=game,
+                                     your_turn=False)
 
 
 
@@ -876,4 +956,4 @@ class LoadingTest(SelfConsistency):
             self.assertEqual(game_one.winners, game_two.winners)
 
 if __name__ == "__main__":
-    application.run()
+    application.run(debug=True)
