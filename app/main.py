@@ -1,8 +1,19 @@
+"""A simple web application to play the game 'love letter'."""
+
 from enum import IntEnum
-from collections import namedtuple
 import random
 
 import unittest
+
+import flask
+
+application = flask.Flask(__name__)
+
+
+@application.route("/")
+def welcome():
+    return "Hello World!"
+
 
 
 class Card(IntEnum):
@@ -49,9 +60,18 @@ class GameFinished(Exception):
 
     pass
 
+
 class Move(object):
-    def __init__(self, player, card, nominated_player=None, nominated_card=None):
-        self.player = player
+
+    """A class for describing a move made in the game."""
+
+    def __init__(self, who, card, nominated_player=None, nominated_card=None):
+        """Simple constructor.
+
+        Nominated_player and nominated_card are optional
+        since not all moves require either.
+        """
+        self.player = who
         self.card = card
         self.nominated_player = nominated_player
         self.nominated_card = nominated_card
@@ -65,7 +85,9 @@ class Move(object):
                               nom_card])
         return log_entry
 
+
 class Game(object):
+    """The main game class representing a game currently in play."""
     def __init__(self, players, deck=None, discarded=None, log=None):
         self.players = players
         self.handmaided = set()
@@ -90,11 +112,11 @@ class Game(object):
 
             # Begin the game by dealing a card to each player
             self.deal = [(p, self.deck.pop(0)) for p in self.players]
-            self.hands = {p:c for (p,c) in self.deal}
+            self.hands = {p:c for (p, c) in self.deal}
         else:
             log_lines = log.split("\n")
             self.deal = [self.parse_drawcard(l) for l in log_lines[:4]]
-            self.hands = {p:c for (p,c) in self.deal}
+            self.hands = {p:c for (p, c) in self.deal}
             deck_lines = [self.parse_drawcard(l)
                           for l in log_lines[5:] if ':' in l]
             play_lines = [self.parse_action(l) for l in log_lines if ',' in l]
@@ -852,3 +874,6 @@ class LoadingTest(SelfConsistency):
             self.assertEqual(game_one.players, game_two.players)
             self.assertEqual(game_one.hands, game_two.hands)
             self.assertEqual(game_one.winners, game_two.winners)
+
+if __name__ == "__main__":
+    application.run()
