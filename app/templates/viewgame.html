@@ -2,18 +2,43 @@
 
 {% block content %}
 
+{% if db_game.game.is_game_finished() %}
+  <h1>This Game is Finished</h1>
+  {% if db_game.game.winner is plural %}
+    The winners are:
+    <ul>
+        {%for p in db_game.game.winners %}
+            <li>{{p}}</li>
+        {% endfor %}
+    </ul>
+  {% else %}
+  The winner is: {{db_game.game.winners.pop()}}
+  {% endif %}
+
+{% else %}<!-- the game is not finished -->
+
 <pre>
-    {{game.serialise_game()}}
+    {{db_game.game.serialise_game()}}
 </pre>
+
+Currently handmaided players are:
+<ul>
+    {% for p in db_game.game.handmaided %}
+     <li>{{p}}</li>
+    {% endfor %}
+</ul>
 
 {% if your_turn %}
 <ul>
     {% for move in possible_moves %}
-        <li>{{move.to_log_string()}}</li>
+        <li><a href="{{url_for('playcard', game_no=db_game.game_id, secret=secret, card=move.card, nom_player=move.nominated_player, nom_card=move.nominated_card)}}">
+            {{move.to_log_string()}}</a></li>
     {% endfor %}
 </ul>
 {% else %}
 It's not your turn.
 {% endif %}<!-- your_turn -->
+
+{% endif %}<!-- the game is finished, end of else branch -->
 
 {% endblock %}

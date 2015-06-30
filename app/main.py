@@ -15,6 +15,9 @@ from wtforms.validators import DataRequired, Email
 application = flask.Flask(__name__)
 application.secret_key = b'7a\xe1f\x17\xc9C\xcb*\x85\xc1\x95G\x97\x03\xa3D\xd3F\xcf\x03\xf3\x99>'
 
+@application.template_test('plural')
+def is_plural(container):
+    return len(container) > 1
 
 class Database(object):
     """A temporary mock database."""
@@ -24,9 +27,9 @@ class Database(object):
     class DBGame(object):
         def __init__(self, game_id):
             self.game_id = game_id
-            self.game = Game(['a', 'b', 'c', 'd'])
-            self.secrets = {random.getrandbits(48): p for p in self.game.players}
-            self.game.draw_card()
+            players = ['a', 'b', 'c', 'd']
+            self.secrets = {random.getrandbits(48): p for p in players}
+            self.game = Game(players)
 
         def is_player(self, secret):
             return secret in self.secrets
@@ -86,14 +89,30 @@ def viewgame(game_no, secret):
     except KeyError:
         flask.flash("You are not in this game! Secret key invalid.")
         player ='' # This way it won't be this player's turn.
-    if game.on_turn[0] == player:
+    if not game.is_game_finished() and game.on_turn[0] == player:
         possible_moves = game.available_moves()
-        return flask.render_template('viewgame.html', game=game,
+        return flask.render_template('viewgame.html', db_game=db_game, secret=secret,
                                      your_turn=True, possible_moves=possible_moves)
     else:
-        return flask.render_template('viewgame.html', game=game,
+        return flask.render_template('viewgame.html', db_game=db_game,
                                      your_turn=False)
 
+@application.route('/playcard/<int:game_no>/<int:secret>/<int:card>')
+@application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>')
+@application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>/<int:nom_card>')
+def playcard(game_no, secret, card, nom_player=None, nom_card=None):
+    db_game = database.games[game_no]
+    game = db_game.game
+    try:
+        player = db_game.secrets[secret]
+    except KeyError:
+        flask.flash("You are not in this game! Secret key invalid.")
+        return redirect_url()
+    card = Card(int(card))
+    nom_card = None if nom_card is None else Card(int(nom_card))
+    move = Move(player, card, nominated_card=nom_card, nominated_player=nom_player)
+    game.play_turn(move)
+    return flask.redirect(redirect_url())
 
 
 class Card(IntEnum):
@@ -171,9 +190,11 @@ class Game(object):
     def __init__(self, players, deck=None, discarded=None, log=None):
         self.players = players
         self.handmaided = set()
+        self.out_players = set()
         self.log = []
         self.winners = None
         self.winning_card = None
+        self.on_turn = None
 
         if log is None:
             if deck is None:
@@ -193,6 +214,8 @@ class Game(object):
             # Begin the game by dealing a card to each player
             self.deal = [(p, self.deck.pop(0)) for p in self.players]
             self.hands = {p:c for (p, c) in self.deal}
+            # And drawing a card for the first player:
+            self.draw_card()
         else:
             log_lines = log.split("\n")
             self.deal = [self.parse_drawcard(l) for l in log_lines[:4]]
@@ -211,14 +234,14 @@ class Game(object):
             random.shuffle(rest_of_deck)
             # It is possible there is no discarded because all the cards were
             # used up. This would happen if we are loading the log of a game
-            # that finished with someone playing the prince forcing someone else
-            # to take the discarded. So we have to check that the rest of the
-            # deck is not empty.
+            # that finished with someone playing the prince forcing someone
+            # else to take the discarded. So we have to check that the rest of
+            # the deck is not empty.
             if rest_of_deck:
                 self.discarded = rest_of_deck.pop()
             self.deck += rest_of_deck
+            self.draw_card()
             for move in play_lines:
-                self.draw_card()
                 self.play_turn(move)
 
     def parse_drawcard(self, line):
@@ -245,6 +268,7 @@ class Game(object):
         """ You can draw a known card, this is useful for restoring a game from
             a log.
         """
+        assert self.on_turn is None
         if card is None and self.deck and len(self.players) > 1:
             card = self.take_top_card()
         if card is not None:
@@ -255,8 +279,16 @@ class Game(object):
         else:
             raise GameFinished()
 
+    def live_players(self):
+        if self.on_turn is None:
+            return self.players
+        else:
+            return [self.on_turn[0]] + self.players
+
     def is_game_finished(self):
-        return (not self.deck) or len(self.players) <= 1
+        completed_deck = self.on_turn is None and not self.deck
+        one_player = len(self.live_players()) <= 1
+        return completed_deck or one_player
 
     def _available_moves_for_card(self, player, card, other_card):
         """ Return the moves available for the first given card. The second
@@ -333,6 +365,9 @@ class Game(object):
         def log_discard(out_player, out_card):
             discard_logs.append("{0}-{1}".format(out_player, out_card))
 
+        def log_extra_pickup(pickup_player, extra_card):
+            discard_logs.append("{0}:{1}".format(pickup_player, extra_card))
+
         def log_play():
             """ We define this as a method rather than simply doing this now,
                 because we may back out of this if the move is not valid.
@@ -353,16 +388,14 @@ class Game(object):
         # If the player is handmaided, they are now not handmaided.
         self.handmaided.discard(player)
 
-
         if card == Card.guard:
             if nominated_player is None:
-                if all_opponents_handmaided:
-                    # That's fine then, we just discard the card and carry on
-                    # We possibly should also check that the nominated card is
-                    # also None.
-                    pass
-                else:
+                if not all_opponents_handmaided:
                     raise NoNominatedPlayerException("You must nominated a player")
+
+                # Otherwise that's fine then, we just discard the card and
+                # carry on. We possibly should also check that the nominated
+                # card is also None.
             elif nominated_player not in self.players:
                 raise Exception("You cannot guard someone already out of the game")
             elif nominated_card is None:
@@ -377,6 +410,7 @@ class Game(object):
                     # Nominated player is out of the game
                     log_discard(nominated_player, self.hands[nominated_player])
                     self.players.remove(nominated_player)
+                    self.out_players.add(nominated_player)
 
         elif card == Card.priest:
             # Not a lot to do here, we should perhaps log the fact that this
@@ -395,9 +429,7 @@ class Game(object):
                 raise Exception("You have to baron against a player still in the game.")
             elif nominated_player in self.handmaided:
                 raise Exception("You cannot baron a handmaided player.")
-            else:
-                # Then we have an acceptable use of the priest card.
-                pass
+            # Then we have an acceptable use of the priest card.
         elif card == Card.baron:
             if nominated_player is None:
                 if all_opponents_handmaided:
@@ -416,13 +448,13 @@ class Game(object):
                 if kept_card > opponents_card:
                     log_discard(nominated_player, opponents_card)
                     self.players.remove(nominated_player)
+                    self.out_players.add(nominated_player)
                 elif opponents_card > kept_card:
-                    # Do nothing, but the current player is out of the game so we
-                    # return without placing the current player in players list
-                    # but we do log the play though.
+                    # Do nothing, but the current player is out of the game so
+                    # we return without placing the current player in players
+                    # list but we do log the play though.
                     log_discard(player, kept_card)
-                    log_play()
-                    return
+                    self.out_players.add(player)
                 # If the cards are equal nothing happens.
 
         elif card == Card.handmaid:
@@ -442,13 +474,15 @@ class Game(object):
             elif nominated_player == player:
                 log_discard(nominated_player, kept_card)
                 if kept_card == Card.princess:
-                    # Oh oh, you're out of the game! Return without placing the
-                    # current player in player list.
-                    log_play()
-                    return
-                new_card = self.take_top_card() if self.deck else self.discarded
-                discard_logs.append(player + ":" + str(new_card.value))
-                kept_card = new_card
+                    # Oh oh, you're out of the game!
+                    self.out_players.add(player)
+                else:
+                    try:
+                        new_card = self.take_top_card()
+                    except IndexError:
+                        new_card = self.discarded
+                    log_extra_pickup(player, new_card)
+                    kept_card = new_card
             else:
                 discarded = self.hands[nominated_player]
                 log_discard(nominated_player, discarded)
@@ -456,13 +490,17 @@ class Game(object):
                     # Oh oh, that player is forced to discard the princess and
                     # is hence out of the game.
                     self.players.remove(nominated_player)
+                    self.out_players.add(nominated_player)
                 else:
                     # Otherwise give them a new card. Note that if the deck is
                     # empty they are given the card that was discarded from the
                     # deck at the start (to ensure there is not total knowledge
                     # of the deck).
-                    new_card = self.take_top_card() if self.deck else self.discarded
-                    discard_logs.append(nominated_player + ":" + str(new_card.value))
+                    try:
+                        new_card = self.take_top_card()
+                    except IndexError:
+                        new_card = self.discarded
+                    log_extra_pickup(nominated_player, new_card)
                     self.hands[nominated_player] = new_card
 
         elif card == Card.king:
@@ -473,12 +511,10 @@ class Game(object):
             if kept_card == Card.countess:
                 raise CountessForcedException("You must discard the countess if you have a king")
             elif nominated_player is None:
-                if all_opponents_handmaided:
-                    # Okay so fine there is no-one you can play the king against
-                    # hence it becomes a simple discard.
-                    pass
-                else:
+                if not all_opponents_handmaided:
                     raise NoNominatedPlayerException("You must nominated a player")
+                # If all opponents are handmaided then playing the king
+                # becomes a simple discard.
             elif nominated_player not in self.players:
                 raise Exception("You have to king against a player still in the game.")
             elif nominated_player in self.handmaided:
@@ -491,18 +527,19 @@ class Game(object):
             # This is fine, we need to check above that a player never manages
             # to avoid discarding the countess when they hold the prince or the
             # king, but discarding the countess is always fine, but has no
-            # effect.
+            # effect, other than to add the discard.
             pass
 
         elif card == Card.princess:
             # The player is out, so do not append them to the back of the
             # players list.
-            log_play()
-            return
+            self.out_players.add(player)
 
         log_play()
-        self.hands[player] = kept_card
-        self.players.append(player)
+        if player not in self.out_players:
+            self.hands[player] = kept_card
+            self.players.append(player)
+        self.on_turn = None
         if self.is_game_finished():
             for p in self.players:
                 if self.winning_card is None:
@@ -513,6 +550,8 @@ class Game(object):
                     self.winners = set(p)
                 elif self.hands[p] == self.winning_card:
                     self.winners.add(p)
+        else:
+            self.draw_card()
 
 class GameTest(unittest.TestCase):
     def test_guard_wins(self):
@@ -532,11 +571,8 @@ class GameTest(unittest.TestCase):
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.draw_card()
         game.play_turn(Move('a', Card.guard, nominated_player='b', nominated_card=Card.priest))
-        game.draw_card()
         game.play_turn(Move('c', Card.guard, nominated_player='d', nominated_card=Card.priest))
-        game.draw_card()
         game.play_turn(Move('a', Card.guard, nominated_player='c', nominated_card=Card.baron))
         self.assertEqual(game.players, ['a'])
         expected_log = ("a:1\n"
@@ -568,9 +604,7 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.draw_card()
         game.play_turn(Move('a', Card.baron, nominated_player='b'))
-        game.draw_card()
         game.play_turn(Move('c', Card.baron, nominated_player='d'))
         self.assertEqual(game.players, ['d', 'a'])
         expected_log = ("a:3\n"
@@ -593,7 +627,6 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.draw_card()
         game.play_turn(Move('a', Card.baron, nominated_player='d'))
         # Both a and d still in the game due to the drawn baron showdown.
         self.assertEqual(game.players, ['b', 'c', 'd', 'a'])
@@ -627,35 +660,29 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.draw_card()
         game.play_turn(Move('a', Card.handmaid))
         self.assertEqual(set(['a']), game.handmaided)
-        game.draw_card()
         # Assert that 'b' cannot baron 'a'
         with self.assertRaises(Exception):
             game.play_turn(Move('b', Card.baron, nominated_player='a'))
         # But they can baron 'c' and will win as prince > guard
         game.play_turn(Move('b', Card.baron, nominated_player='c'))
-        self.assertEqual(['d', 'a', 'b'], game.players)
+        self.assertEqual(['d', 'a', 'b'], game.live_players())
         # a is still handmaided
         self.assertEqual(set(['a']), game.handmaided)
         # 'd' draws and plays the guard and kills b
-        game.draw_card()
         game.play_turn(Move('d', Card.guard, nominated_player='b', nominated_card=Card.prince))
-        self.assertEqual(['a', 'd'], game.players)
+        self.assertEqual(['a', 'd'], game.live_players())
         # 'a' draws and plays a guard, but does not manage to kill 'd' we check
         # that 'a' is no longer handmaided
-        game.draw_card()
         game.play_turn(Move('a', Card.guard, nominated_player='d', nominated_card=Card.princess))
         self.assertEqual(set(), game.handmaided)
         # 'd' draws and plays a handmaid
-        game.draw_card()
         game.play_turn(Move('d', Card.handmaid))
         self.assertIn('d', game.handmaided)
         # 'a' draws a king, and plays it but it has no effect because 'd',
         # the only other player, is handmaided. Here we show that attempting to
         # king 'd' results in an exception so instead we king None.
-        game.draw_card()
         with self.assertRaises(Exception):
             game.play_turn(Move('a', Card.king, nominated_player='d'))
         game.play_turn(Move('a', Card.king, nominated_player=None))
@@ -700,15 +727,12 @@ class GameTest(unittest.TestCase):
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.draw_card()
         game.play_turn(Move('a', Card.prince, nominated_player='b'))
         # Assert that 'b' now has the princess not the guard they were dealt.
         self.assertEqual(game.hands['b'], Card.princess)
-        game.draw_card()
         game.play_turn(Move('b', Card.countess))
 
         # c draws a card and we check that they are able to prince themselves.
-        game.draw_card()
         game.play_turn(Move('c', Card.prince, nominated_player='c'))
         # So now 'b' should still have the princess and 'c' should have a king.
         self.assertEqual(game.hands['b'], Card.princess)
@@ -742,7 +766,6 @@ class GameTest(unittest.TestCase):
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck, discarded=Card.princess)
-        game.draw_card()
         game.play_turn(Move('a', Card.prince, nominated_player='b'))
         self.assertEqual(game.hands['b'], Card.princess)
         expected_log = ("a:5\n"
@@ -764,7 +787,6 @@ class GameTest(unittest.TestCase):
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.draw_card()
         game.play_turn(Move('a', Card.king, nominated_player='d'))
         self.assertEqual(game.hands['a'], Card.princess)
         self.assertEqual(game.hands['d'], Card.guard)
@@ -792,13 +814,9 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.draw_card()
         game.play_turn(Move('a', Card.handmaid))
-        game.draw_card()
         game.play_turn(Move('b', Card.handmaid))
-        game.draw_card()
         game.play_turn(Move('c', Card.handmaid))
-        game.draw_card()
         # Before we play it as a discard we attempt to play it properly against
         # a handmaided opponent, which should raise an error:
         with self.assertRaises(Exception):
@@ -839,7 +857,6 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.draw_card()
         # Player a draws a prince/king and attempts to play it, but cannot
         # because they have the countess.
         with self.assertRaises(CountessForcedException):
@@ -873,7 +890,6 @@ class GameTest(unittest.TestCase):
         # immediately, it might be that we should stop someone doing something
         # obviously stupid, but for now we just follow the rules:
         game = Game(players, deck=deck)
-        game.draw_card()
         game.play_turn(Move('a', Card.princess))
         self.assertNotIn('a', game.players)
         expected_log = ("a:8\n"
@@ -894,12 +910,11 @@ class GameTest(unittest.TestCase):
                  ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.draw_card()
         # So player 'a' princes player 'c' and forces them to discard the
         # princess
         game.play_turn(Move('a', Card.prince, nominated_player='c'))
         self.assertNotIn('c', game.players)
-        self.assertNotEqual('c', game.on_turn[0])
+        self.assertIn('c', game.out_players)
         expected_log = ("a:5\n"
                         "b:1\n"
                         "c:8\n"
@@ -914,6 +929,8 @@ class SelfConsistency(unittest.TestCase):
     """ In this test class we simply run several iterations of the game and
         we should get no exceptions being raised for illegal moves because
         we should only be choosing from those we are given.
+        We also check that the game can loaded from a log and you get the same
+        result as before you serialised the game.
     """
     def play_test_game(self, limit=100):
         players = ['a', 'b', 'c', 'd']
@@ -921,7 +938,6 @@ class SelfConsistency(unittest.TestCase):
         for _ in range(limit):
             if game.is_game_finished():
                 break
-            game.draw_card()
             possible_moves = game.available_moves()
             game.play_turn(random.choice(possible_moves))
         return game
@@ -930,12 +946,6 @@ class SelfConsistency(unittest.TestCase):
         for _ in range(100):
             self.play_test_game()
 
-class LoadingTest(SelfConsistency):
-    """ The same as the self consistency test, except that we may end some
-        games before the game is over, and, more importantly, we check that
-        whenever we pause the game, we can extract the log, load the log into
-        a new game and get the same result.
-    """
     def test_load(self):
         for _ in range(100):
             # Note that the initial deal is not actually counted in the
