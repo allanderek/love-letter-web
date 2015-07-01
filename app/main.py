@@ -14,6 +14,7 @@ from wtforms.validators import DataRequired, Email
 
 application = flask.Flask(__name__)
 application.secret_key = b'7a\xe1f\x17\xc9C\xcb*\x85\xc1\x95G\x97\x03\xa3D\xd3F\xcf\x03\xf3\x99>'
+application.live_server_port = 5000
 
 @application.template_test('plural')
 def is_plural(container):
