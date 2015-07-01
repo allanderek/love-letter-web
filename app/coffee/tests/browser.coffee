@@ -64,8 +64,21 @@ class ChallengeTest extends BrowserTest
   description: "Tests the 'Challenge a player process"
   numTests: 1
   testBody: (test) =>
+    a_email = 'a@here.com'
+    b_email = 'b@here.com'
+    c_email = 'c@here.com'
+    d_email = 'd@here.com'
     casper.thenOpen serverUrl, =>
       test.assertExists '#challenge-link'
+    casper.thenClick '#challenge-link', ->
+      form_values =
+        'input[name="a_email"]' : a_email
+        'input[name="b_email"]' : b_email
+        'input[name="c_email"]' : c_email
+        'input[name="d_email"]' : d_email
+
+      # The final 'true' argument means that the form is submitted.
+      @fillSelectors 'form', form_values, true
 
 
 registerTest new ChallengeTest
