@@ -61,8 +61,8 @@ class BrowserTest
 
 class ChallengeTest extends BrowserTest
   names: ['ChallengeTest', 'challenge']
-  description: "Tests the 'Challenge a player process"
-  numTests: 1
+  description: "Tests the ability to create a game"
+  numTests: 5
   testBody: (test) =>
     a_email = 'a@here.com'
     b_email = 'b@here.com'
@@ -78,7 +78,12 @@ class ChallengeTest extends BrowserTest
         'input[name="d_email"]' : d_email
 
       # The final 'true' argument means that the form is submitted.
-      @fillSelectors 'form', form_values, true
+      @fillSelectors 'form', form_values, false
+    casper.thenClick '#send_challenge', ->
+      test.assertExists '#a_secret'
+      test.assertExists '#b_secret'
+      test.assertExists '#c_secret'
+      test.assertExists '#d_secret'
 
 
 registerTest new ChallengeTest
