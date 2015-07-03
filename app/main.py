@@ -75,7 +75,7 @@ def challenge():
                     <ul>"""
         for secret, player in db_game.secrets.items():
             url = url_for('viewgame', game_no=db_game.game_id, secret=secret)
-            link = '<a href="{0}">View game player {1}</a>'.format(url, player)
+            link = '<a id="{0}_player_link" href="{1}">View game player {0}</a>'.format(player, url)
             secret_span_format = '<span id="{0}_secret">{1}</span>'
             secret_span = secret_span_format.format(player, secret)
             result += "<li>" + link + secret_span + "</li>"

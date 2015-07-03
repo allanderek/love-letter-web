@@ -46,7 +46,8 @@ def test_main():
 @manager.command
 def test():
     casper_result = test_casper()
-    return max()
+    main_result = test_main()
+    return max([casper_result, main_result])
 
 @manager.command
 def coverage(quick=False, browser=False, phantom=False):

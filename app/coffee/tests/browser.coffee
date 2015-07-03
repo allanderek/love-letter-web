@@ -62,12 +62,16 @@ class BrowserTest
 class ChallengeTest extends BrowserTest
   names: ['ChallengeTest', 'challenge']
   description: "Tests the ability to create a game"
-  numTests: 5
+  numTests: 6
+
   testBody: (test) =>
     a_email = 'a@here.com'
     b_email = 'b@here.com'
     c_email = 'c@here.com'
     d_email = 'd@here.com'
+    a_link = null
+    a_link_target = null
+
     casper.thenOpen serverUrl, =>
       test.assertExists '#challenge-link'
     casper.thenClick '#challenge-link', ->
@@ -76,15 +80,19 @@ class ChallengeTest extends BrowserTest
         'input[name="b_email"]' : b_email
         'input[name="c_email"]' : c_email
         'input[name="d_email"]' : d_email
-
-      # The final 'true' argument means that the form is submitted.
+      # The final 'false' argument means that the form is not submitted.
       @fillSelectors 'form', form_values, false
-    casper.thenClick '#send_challenge', ->
+
+    casper.thenClick '#send_challenge', =>
       test.assertExists '#a_secret'
       test.assertExists '#b_secret'
       test.assertExists '#c_secret'
       test.assertExists '#d_secret'
+      a_link_target = casper.getElementAttribute '#a_player_link', 'href'
 
+    casper.thenOpen serverUrl, =>
+      casper.thenOpen ('http://127.0.0.1:5000' + a_link_target), =>
+        test.assertExists '.game-log'
 
 registerTest new ChallengeTest
 
