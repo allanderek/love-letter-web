@@ -62,17 +62,14 @@ class BrowserTest
 class ChallengeTest extends BrowserTest
   names: ['ChallengeTest', 'challenge']
   description: "Tests the ability to create a game"
-  numTests: 6
+  numTests: 9
 
   testBody: (test) =>
     a_email = 'a@here.com'
     b_email = 'b@here.com'
     c_email = 'c@here.com'
     d_email = 'd@here.com'
-    a_game_address = null
-    b_game_address = null
-    c_game_address = null
-    d_game_address = null
+    game_addresses = {a: null, b: null, c:null, d:null}
 
     getPlayerGameLinkAddress = (player) ->
       link_selector = '#' + player + '_player_link'
@@ -95,11 +92,22 @@ class ChallengeTest extends BrowserTest
       test.assertExists '#b_secret'
       test.assertExists '#c_secret'
       test.assertExists '#d_secret'
-      a_game_address = getPlayerGameLinkAddress 'a'
+      for player in ['a', 'b', 'c', 'd']
+        game_addresses[player] = getPlayerGameLinkAddress player
+
+    player_alive = {a: true, b: true, c: true, d: true}
 
     casper.thenOpen serverUrl, =>
-      casper.thenOpen (a_game_address), =>
-        test.assertExists '.game-log'
+      for player in ['a', 'b', 'c', 'd']
+        casper.thenOpen game_addresses[player], =>
+          test.assertExists '.game-log'
+          if casper.exists '.playable-move a'
+            casper.thenClick '.playable-move a'
+          else
+            player_alive[player] = false
+
+      for player in ['a', 'b', 'c', 'd']
+        casper.echo (player_alive[player])
 
 registerTest new ChallengeTest
 
