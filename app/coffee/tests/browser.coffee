@@ -69,8 +69,15 @@ class ChallengeTest extends BrowserTest
     b_email = 'b@here.com'
     c_email = 'c@here.com'
     d_email = 'd@here.com'
-    a_link = null
-    a_link_target = null
+    a_game_address = null
+    b_game_address = null
+    c_game_address = null
+    d_game_address = null
+
+    getPlayerGameLinkAddress = (player) ->
+      link_selector = '#' + player + '_player_link'
+      suffix = casper.getElementAttribute link_selector, 'href'
+      serverUrl + suffix
 
     casper.thenOpen serverUrl, =>
       test.assertExists '#challenge-link'
@@ -88,10 +95,10 @@ class ChallengeTest extends BrowserTest
       test.assertExists '#b_secret'
       test.assertExists '#c_secret'
       test.assertExists '#d_secret'
-      a_link_target = casper.getElementAttribute '#a_player_link', 'href'
+      a_game_address = getPlayerGameLinkAddress 'a'
 
     casper.thenOpen serverUrl, =>
-      casper.thenOpen ('http://127.0.0.1:5000' + a_link_target), =>
+      casper.thenOpen (a_game_address), =>
         test.assertExists '.game-log'
 
 registerTest new ChallengeTest
