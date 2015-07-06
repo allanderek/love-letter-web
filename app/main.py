@@ -91,14 +91,14 @@ def viewgame(game_no, secret):
         player = db_game.secrets[secret]
     except KeyError:
         flask.flash("You are not in this game! Secret key invalid.")
-        player ='' # This way it won't be this player's turn.
+        player = ''  # This way it won't be this player's turn.
     if not game.is_game_finished() and game.on_turn[0] == player:
         possible_moves = game.available_moves()
         return flask.render_template('viewgame.html', db_game=db_game, secret=secret,
                                      your_turn=True, possible_moves=possible_moves)
     else:
         return flask.render_template('viewgame.html', db_game=db_game,
-                                     your_turn=False)
+                                    your_turn=False)
 
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>')
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>')
@@ -114,7 +114,10 @@ def playcard(game_no, secret, card, nom_player=None, nom_card=None):
     card = Card(int(card))
     nom_card = None if nom_card is None else Card(int(nom_card))
     move = Move(player, card, nominated_card=nom_card, nominated_player=nom_player)
-    game.play_turn(move)
+    try:
+        game.play_turn(move)
+    except NotYourTurnException:
+        flask.flash("It's not your turn!")
     return flask.redirect(redirect_url())
 
 
@@ -132,6 +135,12 @@ card_pack = [Card.princess, Card.countess, Card.king, Card.prince,
              Card.handmaid, Card.handmaid, Card.baron, Card.baron,
              Card.priest, Card.priest,
              Card.guard, Card.guard, Card.guard, Card.guard, Card.guard]
+
+
+class NotYourTurnException(Exception):
+    """ An exception to raise when a player attempts to play out of turn."""
+    pass
+
 
 class CountessForcedException(Exception):
     """ An exception to be raised whenever a player attempts to play a king or
@@ -382,8 +391,9 @@ class Game(object):
         all_opponents_handmaided = all(p in self.handmaided for p in self.players)
 
         if player != who:
-            raise Exception("It's not your turn: {0} != {1}, {2}".format(
-                            player, who, str(self.players)))
+            message_format = "It's not your turn: {0} != {1}, {2}"
+            message = format(player, who, str(self.players))
+            raise NotYourTurnException(message)
         if card not in [card_one, card_two]:
             raise Exception("Illegal attempt to play a card you do not have.")
         kept_card = card_two if card == card_one else card_one

@@ -7,12 +7,20 @@
   {% if db_game.game.winner is plural %}
     The winners are:
     <ul>
-        {%for p in db_game.game.winners %}
-            <li>{{p}}</li>
+        {% for p in db_game.game.winners %}
+            <li><span class='game-winner'>{{p}}</span></li>
         {% endfor %}
     </ul>
   {% else %}
-  The winner is: {{db_game.game.winners.pop()}}
+  The winner is:
+    {# The loop seems spurious since we know there is exactly one
+       element, but there is no simple way to take the singleton element
+       from the set without removing it, which we do not wish to do because
+       other players may view this page (or you may even refresh.)
+    #}
+    {% for p in db_game.game.winners %}
+       <span class='game-winner'>{{p}}</span>
+    {% endfor %}
   {% endif %}
 
 {% else %}<!-- the game is not finished -->
