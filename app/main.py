@@ -16,9 +16,11 @@ application = flask.Flask(__name__)
 application.secret_key = b'7a\xe1f\x17\xc9C\xcb*\x85\xc1\x95G\x97\x03\xa3D\xd3F\xcf\x03\xf3\x99>'
 application.live_server_port = 5000
 
+
 @application.template_test('plural')
 def is_plural(container):
     return len(container) > 1
+
 
 class Database(object):
     """A temporary mock database."""
@@ -75,13 +77,15 @@ def challenge():
                     <ul>"""
         for secret, player in db_game.secrets.items():
             url = url_for('viewgame', game_no=db_game.game_id, secret=secret)
-            link = '<a id="{0}_player_link" href="{1}">View game player {0}</a>'.format(player, url)
+            link = '<a id="{0}_player_link" href="{1}">View game player {0}</a>'
+            link = link.format(player, url)
             secret_span_format = '<span id="{0}_secret">{1}</span>'
             secret_span = secret_span_format.format(player, secret)
             result += "<li>" + link + secret_span + "</li>"
         result += "</ul>"
         return result
     return flask.render_template("challenge.html", form=form)
+
 
 @application.route('/viewgame/<int:game_no>/<int:secret>')
 def viewgame(game_no, secret):
@@ -94,11 +98,12 @@ def viewgame(game_no, secret):
         player = ''  # This way it won't be this player's turn.
     if not game.is_game_finished() and game.on_turn[0] == player:
         possible_moves = game.available_moves()
-        return flask.render_template('viewgame.html', db_game=db_game, secret=secret,
-                                     your_turn=True, possible_moves=possible_moves)
+        return flask.render_template('viewgame.html', db_game=db_game,
+                                     secret=secret, your_turn=True,
+                                     possible_moves=possible_moves)
     else:
         return flask.render_template('viewgame.html', db_game=db_game,
-                                    your_turn=False)
+                                     your_turn=False)
 
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>')
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>')
@@ -113,7 +118,8 @@ def playcard(game_no, secret, card, nom_player=None, nom_card=None):
         return redirect_url()
     card = Card(int(card))
     nom_card = None if nom_card is None else Card(int(nom_card))
-    move = Move(player, card, nominated_card=nom_card, nominated_player=nom_player)
+    move = Move(player, card, nominated_card=nom_card,
+                nominated_player=nom_player)
     try:
         game.play_turn(move)
     except NotYourTurnException:
@@ -150,36 +156,33 @@ class CountessForcedException(Exception):
 
 
 class NoNominatedPlayerException(Exception):
-
     """An exception to raise whenever a player does not nominate a player.
-
     Some cards, namely, the guard, priest, baron, prince and king require that
     you nominate a player (unless all other players are handmaided). This is
     the exception to raise if a player fails to do so.
     """
-
     pass
 
 
 class GameFinished(Exception):
-
     """An exception to raise when the game is over.
-
     The game is over either because there is only a single player left,
     or because there are no cards left to draw.
     """
-
     pass
 
 
-class Move(object):
+def format_none(value, format_fun=str):
+    """ Utility function to format a value as a string when the value may be
+    'None', in which case we want the empty string.
+    """
+    return '' if value is None else format_fun(value)
 
+class Move(object):
     """A class for describing a move made in the game."""
 
     def __init__(self, who, card, nominated_player=None, nominated_card=None):
-        """Simple constructor.
-
-        Nominated_player and nominated_card are optional
+        """Simple constructor. Nominated_player and nominated_card are optional
         since not all moves require either.
         """
         self.player = who
@@ -188,8 +191,9 @@ class Move(object):
         self.nominated_card = nominated_card
 
     def to_log_string(self):
-        nom_player = '' if self.nominated_player is None else self.nominated_player
-        nom_card = '' if self.nominated_card is None else str(self.nominated_card.value)
+        nom_player = format_none(self.nominated_player, str)
+        nom_card = format_none(self.nominated_card,
+                               format_fun=lambda x: str(x.value))
         log_entry = ",".join([self.player,
                               str(self.card.value),
                               nom_player,
@@ -210,28 +214,28 @@ class Game(object):
 
         if log is None:
             if deck is None:
-                # If we are not setting the deck then we assume that we are wanting
-                # a random deck so we randomly shuffle the cards and choose a random
-                # one as the discarded.
+                # If we are not setting the deck then we assume that we are
+                # wanting a random deck so we randomly shuffle the cards and
+                # choose a random one as the discarded.
                 self.deck = card_pack.copy()
                 random.shuffle(self.deck)
                 self.discarded = self.deck.pop(0)
             else:
-                # If we are setting the deck we assume that we are in a test mode
-                # so we set the known deck and either we know that our test does
-                # not need a discarded card or we want to know what it is.
+                # If we are setting the deck we assume that we are in a test
+                # mode so we set the known deck and either we know that our test
+                # does not need a discarded card or we want to know what it is.
                 self.deck = deck
                 self.discarded = discarded
 
             # Begin the game by dealing a card to each player
             self.deal = [(p, self.deck.pop(0)) for p in self.players]
-            self.hands = {p:c for (p, c) in self.deal}
+            self.hands = {p: c for (p, c) in self.deal}
             # And drawing a card for the first player:
             self.draw_card()
         else:
             log_lines = log.split("\n")
             self.deal = [self.parse_drawcard(l) for l in log_lines[:4]]
-            self.hands = {p:c for (p, c) in self.deal}
+            self.hands = {p: c for (p, c) in self.deal}
             deck_lines = [self.parse_drawcard(l)
                           for l in log_lines[5:] if ':' in l]
             play_lines = [self.parse_action(l) for l in log_lines if ',' in l]
@@ -268,7 +272,7 @@ class Game(object):
                     nominated_player=nom_player, nominated_card=nom_card)
 
     def serialise_game(self):
-        result = "\n".join([p + ":" + str(c.value) for (p,c) in self.deal])
+        result = "\n".join([p + ":" + str(c.value) for (p, c) in self.deal])
         result += "\n\n"
         result += "\n".join(self.log)
         return result
@@ -388,7 +392,8 @@ class Game(object):
             for l in discard_logs:
                 self.log.append(l)
 
-        all_opponents_handmaided = all(p in self.handmaided for p in self.players)
+        all_opponents_handmaided = all(p in self.handmaided
+                                       for p in self.players)
 
         if player != who:
             message_format = "It's not your turn: {0} != {1}, {2}"
@@ -404,13 +409,13 @@ class Game(object):
         if card == Card.guard:
             if nominated_player is None:
                 if not all_opponents_handmaided:
-                    raise NoNominatedPlayerException("You must nominated a player")
+                    raise NoNominatedPlayerException()
 
                 # Otherwise that's fine then, we just discard the card and
                 # carry on. We possibly should also check that the nominated
                 # card is also None.
             elif nominated_player not in self.players:
-                raise Exception("You cannot guard someone already out of the game")
+                raise Exception("You cannot guard someone who is already out")
             elif nominated_card is None:
                 raise Exception("You have to nominate a card to play the guard")
             elif nominated_card == Card.guard:
@@ -437,9 +442,9 @@ class Game(object):
                     # also None.
                     pass
                 else:
-                    raise NoNominatedPlayerException("You must nominated a player")
+                    raise NoNominatedPlayerException()
             elif nominated_player not in self.players:
-                raise Exception("You have to baron against a player still in the game.")
+                raise Exception("You must baron a player still in the game.")
             elif nominated_player in self.handmaided:
                 raise Exception("You cannot baron a handmaided player.")
             # Then we have an acceptable use of the priest card.
@@ -451,9 +456,9 @@ class Game(object):
                     # also None.
                     pass
                 else:
-                    raise NoNominatedPlayerException("You must nominated a player")
+                    raise NoNominatedPlayerException()
             elif nominated_player not in self.players:
-                raise Exception("You have to baron against a player still in the game.")
+                raise Exception("You must baron a player still in the game.")
             elif nominated_player in self.handmaided:
                 raise Exception("You cannot baron a handmaided player.")
             else:
@@ -475,11 +480,11 @@ class Game(object):
 
         elif card == Card.prince:
             if kept_card == Card.countess:
-                raise CountessForcedException("You must discard the countess if you have a prince")
+                raise CountessForcedException("You have a prince")
             elif nominated_player is None:
-                raise NoNominatedPlayerException("You must nominated a player")
+                raise NoNominatedPlayerException()
             elif nominated_player not in [player] + self.players:
-                raise Exception("You have to prince against a player still in the game.")
+                raise Exception("You must prince a player still in the game.")
             elif nominated_player in self.handmaided:
                 raise Exception("You cannot prince a handmaided player.")
             # Note: unlike the king below you cannot simply discard the prince,
@@ -522,19 +527,21 @@ class Game(object):
             # for that here.
 
             if kept_card == Card.countess:
-                raise CountessForcedException("You must discard the countess if you have a king")
+                raise CountessForcedException("You have a king")
             elif nominated_player is None:
                 if not all_opponents_handmaided:
-                    raise NoNominatedPlayerException("You must nominated a player")
+                    raise NoNominatedPlayerException()
                 # If all opponents are handmaided then playing the king
                 # becomes a simple discard.
             elif nominated_player not in self.players:
-                raise Exception("You have to king against a player still in the game.")
+                raise Exception("You must king a player still in the game.")
             elif nominated_player in self.handmaided:
-                raise Exception("You cannot king a handmaided players, must nominate None.")
+                raise Exception("You cannot king a handmaided player.")
             else:
+                # Swap the cards, not using a,b = b,a for pep8 reasons.
                 opponents_card = self.hands[nominated_player]
-                kept_card, self.hands[nominated_player] = opponents_card, kept_card
+                self.hands[nominated_player] = kept_card
+                kept_card = opponents_card
 
         elif card == Card.countess:
             # This is fine, we need to check above that a player never manages
@@ -574,13 +581,13 @@ class GameTest(unittest.TestCase):
             out player 4 and then player 1 again knocks out player 2.
         """
         # We set the deck so that we know what comes next.
-        deck = [Card.guard, # Player 1's dealt card.
-                Card.priest, # Player 2's dealt card, which p1 will guess.
-                Card.guard, # Player 3's dealt card.
-                Card.priest, # Player 4's dealt card which p3 will guess.
-                Card.guard, # Player 1's drawn card.
-                Card.baron, # Player 3's drawn card which p1 will guess and win.
-                Card.baron # Player 1 still needs to draw a card.
+        deck = [Card.guard,  # Player 1's dealt card.
+                Card.priest,  # Player 2's dealt card, which p1 will guess.
+                Card.guard,  # Player 3's dealt card.
+                Card.priest,  # Player 4's dealt card which p3 will guess.
+                Card.guard,  # Player 1's drawn card.
+                Card.baron,  # Player 3's drawn card which p1 will guess and win
+                Card.baron  # Player 1 still needs to draw a card.
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
