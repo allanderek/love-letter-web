@@ -2,6 +2,7 @@
 
 from enum import IntEnum
 import random
+from collections import namedtuple
 
 import unittest
 
@@ -13,7 +14,7 @@ from wtforms.validators import DataRequired, Email
 
 
 application = flask.Flask(__name__)
-application.secret_key = b'7a\xe1f\x17\xc9C\xcb*\x85\xc1\x95G\x97\x03\xa3D\xd3F\xcf\x03\xf3\x99>'
+application.secret_key = b'7a\xe1f\x17\xc9C\xcb*\x85\xc1\x95G\x97\x03\xa3D\xd3F\xcf\x03\xf3\x99>'  # noqa
 application.live_server_port = 5000
 
 
@@ -98,14 +99,14 @@ def viewgame(game_no, secret):
         player = ''  # This way it won't be this player's turn.
     if not game.is_game_finished() and game.on_turn[0] == player:
         possible_moves = game.available_moves()
-        on_turn = game.on_turn
+        your_hand = None  # The viewgame will use the possible_moves instead
     else:
-        possible_moves = []
-        on_turn = None
+        possible_moves = None
+        your_hand = game.hands.get(player, None)  # Might not be in the game.
     return flask.render_template('viewgame.html', db_game=db_game,
-                                 secret=secret, on_turn=on_turn,
-                                 your_hand=game.hands.get(player, None),
-                                 possible_moves=possible_moves)
+                                 secret=secret, possible_moves=possible_moves,
+                                 your_hand=your_hand
+                                 )
 
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>')
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>')
@@ -202,6 +203,9 @@ class Move(object):
                               nom_player,
                               nom_card])
         return log_entry
+
+
+PossibleMoves = namedtuple('PossibleMove', ["card", "moves"])
 
 
 class Game(object):
@@ -357,10 +361,11 @@ class Game(object):
 
     def available_moves(self):
         player, card_one, card_two = self.on_turn
-        moves = self._available_moves_for_card(player, card_one, card_two)
-        if card_one != card_two:
-            moves += self._available_moves_for_card(player, card_two, card_one)
-        return moves
+        moves_one = self._available_moves_for_card(player, card_one, card_two)
+        pmoves_one = PossibleMoves(card=card_one, moves=moves_one)
+        moves_two = self._available_moves_for_card(player, card_two, card_one)
+        pmoves_two = PossibleMoves(card=card_two, moves=moves_two)
+        return (pmoves_one, pmoves_two)
 
     def play_turn(self, move_string):
         self.play_move(self.parse_action(move_string))
@@ -961,7 +966,8 @@ class SelfConsistency(unittest.TestCase):
         for _ in range(limit):
             if game.is_game_finished():
                 break
-            possible_moves = game.available_moves()
+            pmoves_one, pmoves_two = game.available_moves()
+            possible_moves = pmoves_one.moves + pmoves_two.moves
             game.play_move(random.choice(possible_moves))
         return game
 
