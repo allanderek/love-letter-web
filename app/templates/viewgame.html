@@ -47,6 +47,9 @@ Your are holding the cards: {{on_turn[1]}} and {{on_turn[2]}}
 </ul>
 {% else %}
 It's not your turn.
+   {% if your_hand is not none %}
+    You are holding {{your_hand}}
+   {% endif %}
 {% endif %}<!-- your_turn -->
 
 {% endif %}<!-- the game is finished, end of else branch -->

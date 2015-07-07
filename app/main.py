@@ -103,7 +103,7 @@ def viewgame(game_no, secret):
         possible_moves = []
         on_turn = None
     return flask.render_template('viewgame.html', db_game=db_game,
-                                 secret=secret, on_turn=game.on_turn,
+                                 secret=secret, on_turn=on_turn,
                                  your_hand=game.hands.get(player, None),
                                  possible_moves=possible_moves)
 
