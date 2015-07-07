@@ -121,7 +121,7 @@ def playcard(game_no, secret, card, nom_player=None, nom_card=None):
     move = Move(player, card, nominated_card=nom_card,
                 nominated_player=nom_player)
     try:
-        game.play_turn(move)
+        game.play_move(move)
     except NotYourTurnException:
         flask.flash("It's not your turn!")
     return flask.redirect(redirect_url())
@@ -258,7 +258,7 @@ class Game(object):
             self.deck += rest_of_deck
             self.draw_card()
             for move in play_lines:
-                self.play_turn(move)
+                self.play_move(move)
 
     def parse_drawcard(self, line):
         return (line[0], Card(int(line[2])))
@@ -359,7 +359,10 @@ class Game(object):
             moves += self._available_moves_for_card(player, card_two, card_one)
         return moves
 
-    def play_turn(self, move):
+    def play_turn(self, move_string):
+        self.play_move(self.parse_action(move_string))
+
+    def play_move(self, move):
         who = move.player
         card = move.card
         nominated_player = move.nominated_player
@@ -573,6 +576,7 @@ class Game(object):
         else:
             self.draw_card()
 
+
 class GameTest(unittest.TestCase):
     def test_guard_wins(self):
         """ In this test we check that a player with a guard can knock out
@@ -591,9 +595,9 @@ class GameTest(unittest.TestCase):
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.play_turn(Move('a', Card.guard, nominated_player='b', nominated_card=Card.priest))
-        game.play_turn(Move('c', Card.guard, nominated_player='d', nominated_card=Card.priest))
-        game.play_turn(Move('a', Card.guard, nominated_player='c', nominated_card=Card.baron))
+        game.play_turn('a,1,b,2')
+        game.play_turn('c,1,d,2')
+        game.play_turn('a,1,c,3')
         self.assertEqual(game.players, ['a'])
         expected_log = ("a:1\n"
                         "b:2\n"
@@ -615,17 +619,17 @@ class GameTest(unittest.TestCase):
             also that a baron-tie causes no changes. We should of course also
             check that handmaid makes this card essentially a simple discard.
         """
-        deck = [ Card.baron, # player a is dealt this card
-                 Card.priest, # player b is dealt this card
-                 Card.baron, # player c is dealt this card
-                 Card.countess, # player d is dealt this card
-                 Card.prince, # a draws prince, higher than b's priest
-                 Card.prince, # c draws prince, lower than d's countess.
-                 ]
+        deck = [Card.baron,  # player a is dealt this card
+                Card.priest,  # player b is dealt this card
+                Card.baron,  # player c is dealt this card
+                Card.countess,  # player d is dealt this card
+                Card.prince,  # a draws prince, higher than b's priest
+                Card.prince,  # c draws prince, lower than d's countess.
+                ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.play_turn(Move('a', Card.baron, nominated_player='b'))
-        game.play_turn(Move('c', Card.baron, nominated_player='d'))
+        game.play_turn('a,3,b,')
+        game.play_turn('c,3,d,')
         self.assertEqual(game.players, ['d', 'a'])
         expected_log = ("a:3\n"
                         "b:2\n"
@@ -638,16 +642,16 @@ class GameTest(unittest.TestCase):
                         "c,3,d,\n"
                         "c-5")
         self.assertEqual(game.serialise_game(), expected_log)
-        deck = [ Card.baron, # player a is dealt this card
-                 Card.priest, # player b is dealt this card
-                 Card.baron, # player c is dealt this card
-                 Card.prince, # player d is dealt this card
-                 Card.prince, # a draws prince, higher than b's priest,
+        deck = [Card.baron,  # player a is dealt this card
+                Card.priest,  # player b is dealt this card
+                Card.baron,  # player c is dealt this card
+                Card.prince,  # player d is dealt this card
+                Card.prince,  # a draws prince, higher than b's priest,
                               # but the same as d's prince.
-                 ]
+                ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.play_turn(Move('a', Card.baron, nominated_player='d'))
+        game.play_turn('a,3,d,')
         # Both a and d still in the game due to the drawn baron showdown.
         self.assertEqual(game.players, ['b', 'c', 'd', 'a'])
         expected_log = ("a:3\n"
@@ -658,7 +662,6 @@ class GameTest(unittest.TestCase):
                         "a,3,d,")
         self.assertEqual(game.serialise_game(), expected_log)
 
-
     def test_handmaid(self):
         """ There is actually no real test to do on the handmaid, if the
             front-end does not allow invalid moves then we should never
@@ -667,45 +670,45 @@ class GameTest(unittest.TestCase):
             under a handmaid and that we raise an exception if we attempt to
             play another card against a handmaid.
         """
-        deck = [ Card.handmaid, # player a is dealt this card
-                 Card.baron, # player b is dealt this card
-                 Card.guard, # player c is dealt this card
-                 Card.countess, # player d is dealt this card
-                 Card.prince, # a draws this card
-                 Card.prince, # b draws this card
-                 Card.guard, # d draws this card.
-                 Card.guard, # a draws a guard
-                 Card.handmaid, # d draws a handmaid
-                 Card.king, # a draws a king
-                 ]
+        deck = [Card.handmaid,  # player a is dealt this card
+                Card.baron,  # player b is dealt this card
+                Card.guard,  # player c is dealt this card
+                Card.countess,  # player d is dealt this card
+                Card.prince,  # a draws this card
+                Card.prince,  # b draws this card
+                Card.guard,  # d draws this card.
+                Card.guard,  # a draws a guard
+                Card.handmaid,  # d draws a handmaid
+                Card.king,  # a draws a king
+                ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.play_turn(Move('a', Card.handmaid))
+        game.play_turn('a,4,,')
         self.assertEqual(set(['a']), game.handmaided)
         # Assert that 'b' cannot baron 'a'
         with self.assertRaises(Exception):
-            game.play_turn(Move('b', Card.baron, nominated_player='a'))
+            game.play_turn('b,3,a,')
         # But they can baron 'c' and will win as prince > guard
-        game.play_turn(Move('b', Card.baron, nominated_player='c'))
+        game.play_turn('b,3,c,')
         self.assertEqual(['d', 'a', 'b'], game.live_players())
         # a is still handmaided
         self.assertEqual(set(['a']), game.handmaided)
         # 'd' draws and plays the guard and kills b
-        game.play_turn(Move('d', Card.guard, nominated_player='b', nominated_card=Card.prince))
+        game.play_turn('d,1,b,5')
         self.assertEqual(['a', 'd'], game.live_players())
         # 'a' draws and plays a guard, but does not manage to kill 'd' we check
         # that 'a' is no longer handmaided
-        game.play_turn(Move('a', Card.guard, nominated_player='d', nominated_card=Card.princess))
+        game.play_turn('a,1,d,8')
         self.assertEqual(set(), game.handmaided)
         # 'd' draws and plays a handmaid
-        game.play_turn(Move('d', Card.handmaid))
+        game.play_turn('d,4,,')
         self.assertIn('d', game.handmaided)
         # 'a' draws a king, and plays it but it has no effect because 'd',
         # the only other player, is handmaided. Here we show that attempting to
         # king 'd' results in an exception so instead we king None.
         with self.assertRaises(Exception):
-            game.play_turn(Move('a', Card.king, nominated_player='d'))
-        game.play_turn(Move('a', Card.king, nominated_player=None))
+            game.play_turn('a,6,d,')
+        game.play_turn('a,6,,')
         # We check the state of the game is as we expect:
         self.assertEqual(['d', 'a'], game.players)
         self.assertEqual(Card.prince, game.hands['a'])
@@ -730,30 +733,29 @@ class GameTest(unittest.TestCase):
                         "a,6,,")
         self.assertEqual(game.serialise_game(), expected_log)
 
-
     def test_prince(self):
         """ This tests the prince has the desired effect, we will also check
             that you can prince yourself.
         """
-        deck = [ Card.prince, # player a is dealt this card
-                 Card.guard, # player b is dealt this card
-                 Card.prince, # player c is dealt this card
-                 Card.guard, # player d is dealt this card
-                 Card.guard, # player a draws this card
-                 Card.princess, # player b draws this when princed by 'a'
-                 Card.countess, # player b draws this card on their turn
-                 Card.handmaid, # player c draws this card on their turn
-                 Card.king # player c princes themselves and draws this card.
+        deck = [Card.prince,  # player a is dealt this card
+                Card.guard,  # player b is dealt this card
+                Card.prince,  # player c is dealt this card
+                Card.guard,  # player d is dealt this card
+                Card.guard,  # player a draws this card
+                Card.princess,  # player b draws this when princed by 'a'
+                Card.countess,  # player b draws this card on their turn
+                Card.handmaid,  # player c draws this card on their turn
+                Card.king  # player c princes themselves and draws this card.
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.play_turn(Move('a', Card.prince, nominated_player='b'))
+        game.play_turn('a,5,b,')
         # Assert that 'b' now has the princess not the guard they were dealt.
         self.assertEqual(game.hands['b'], Card.princess)
-        game.play_turn(Move('b', Card.countess))
+        game.play_turn('b,7,,')
 
         # c draws a card and we check that they are able to prince themselves.
-        game.play_turn(Move('c', Card.prince, nominated_player='c'))
+        game.play_turn('c,5,c,')
         # So now 'b' should still have the princess and 'c' should have a king.
         self.assertEqual(game.hands['b'], Card.princess)
         self.assertEqual(game.hands['c'], Card.king)
@@ -778,15 +780,15 @@ class GameTest(unittest.TestCase):
         # card to be taken by the player is the originally discarded card
         # meaning the card discarded from the deck to make sure there is not
         # total knowledge.
-        deck = [ Card.prince, # player a is dealt this card
-                 Card.guard, # player b is dealt this card
-                 Card.prince, # player c is dealt this card
-                 Card.guard, # player d is dealt this card
-                 Card.guard, # player a draws this card
+        deck = [Card.prince,  # player a is dealt this card
+                Card.guard,  # player b is dealt this card
+                Card.prince,  # player c is dealt this card
+                Card.guard,  # player d is dealt this card
+                Card.guard,  # player a draws this card
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck, discarded=Card.princess)
-        game.play_turn(Move('a', Card.prince, nominated_player='b'))
+        game.play_turn('a,5,b,')
         self.assertEqual(game.hands['b'], Card.princess)
         expected_log = ("a:5\n"
                         "b:1\n"
@@ -799,15 +801,15 @@ class GameTest(unittest.TestCase):
         self.assertEqual(game.serialise_game(), expected_log)
 
     def test_king(self):
-        deck = [ Card.king, # player a is dealt this card
-                 Card.guard, # player b is dealt this card
-                 Card.prince, # player c is dealt this card
-                 Card.princess, # player d is dealt this card
-                 Card.guard, # player a draws this card
+        deck = [Card.king,  # player a is dealt this card
+                Card.guard,  # player b is dealt this card
+                Card.prince,  # player c is dealt this card
+                Card.princess,  # player d is dealt this card
+                Card.guard,  # player a draws this card
                 ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.play_turn(Move('a', Card.king, nominated_player='d'))
+        game.play_turn('a,6,d,')
         self.assertEqual(game.hands['a'], Card.princess)
         self.assertEqual(game.hands['d'], Card.guard)
         expected_log = ("a:6\n"
@@ -823,26 +825,26 @@ class GameTest(unittest.TestCase):
             are handmaided then you are able to simply discard the card. This
             checks that that is indeed possible.
         """
-        deck = [ Card.handmaid, # player a is dealt this card.
-                 Card.handmaid, # player b dealt
-                 Card.handmaid, # player c dealt
-                 discard, # player d dealt
-                 Card.guard, # player a draws this card
-                 Card.guard, # player b draws this card
-                 Card.guard, # player c draws this card
-                 Card.princess, # player d draws this card
-                 ]
+        deck = [Card.handmaid,  # player a is dealt this card.
+                Card.handmaid,  # player b dealt
+                Card.handmaid,  # player c dealt
+                discard,  # player d dealt
+                Card.guard,  # player a draws this card
+                Card.guard,  # player b draws this card
+                Card.guard,  # player c draws this card
+                Card.princess,  # player d draws this card
+                ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
-        game.play_turn(Move('a', Card.handmaid))
-        game.play_turn(Move('b', Card.handmaid))
-        game.play_turn(Move('c', Card.handmaid))
+        game.play_turn('a,4,,')
+        game.play_turn('b,4,,')
+        game.play_turn('c,4,,')
         # Before we play it as a discard we attempt to play it properly against
         # a handmaided opponent, which should raise an error:
         with self.assertRaises(Exception):
-            game.play_turn(Move('d', discard, nominated_player='a'))
+            game.play_turn('d,{0},a,'.format(str(discard.value)))
 
-        game.play_turn(Move('d', discard))
+        game.play_turn('d,{0},,'.format(str(discard.value)))
         self.assertEqual(['a', 'b', 'c', 'd'], game.players)
         expected_log = ("a:4\n"
                         "b:4\n"
@@ -858,7 +860,6 @@ class GameTest(unittest.TestCase):
                         "d,{0},,").format(str(discard.value))
         self.assertEqual(game.serialise_game(), expected_log)
 
-
     def test_handmaid_dicard(self):
         for card in [Card.guard, Card.priest, Card.baron, Card.king]:
             self.check_handmaid_discard(card)
@@ -869,20 +870,20 @@ class GameTest(unittest.TestCase):
             countess.
         """
         self.assertIn(prince_or_king, [Card.prince, Card.king])
-        deck = [ Card.countess, # player a is dealt this card.
-                 Card.guard, # player b dealt
-                 Card.guard, # player c dealt
-                 Card.baron, # player d dealt
-                 prince_or_king # player a draws this card
-                 ]
+        deck = [Card.countess,  # player a is dealt this card.
+                Card.guard,  # player b dealt
+                Card.guard,  # player c dealt
+                Card.baron,  # player d dealt
+                prince_or_king  # player a draws this card
+                ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
         # Player a draws a prince/king and attempts to play it, but cannot
         # because they have the countess.
         with self.assertRaises(CountessForcedException):
-            game.play_turn(Move('a', prince_or_king, nominated_player='d'))
+            game.play_turn('a,{0},d,'.format(str(prince_or_king.value)))
         # So they instead discard the countess
-        game.play_turn(Move('a', Card.countess))
+        game.play_turn('a,7,,')
         self.assertEqual(game.hands['a'], prince_or_king)
         self.assertEqual(['b', 'c', 'd', 'a'], game.players)
         expected_log = ("a:7\n"
@@ -893,24 +894,23 @@ class GameTest(unittest.TestCase):
                         "a,7,,").format(str(prince_or_king.value))
         self.assertEqual(game.serialise_game(), expected_log)
 
-
     def test_countess(self):
         self.check_countess(Card.prince)
         self.check_countess(Card.king)
 
     def test_princess(self):
-        deck = [ Card.princess, # player a is dealt this card
-                 Card.guard, # player b is dealt this card
-                 Card.prince, # player c dealt
-                 Card.guard, # player d
-                 Card.baron, # player a draws this card
-                 ]
+        deck = [Card.princess,  # player a is dealt this card
+                Card.guard,  # player b is dealt this card
+                Card.prince,  # player c dealt
+                Card.guard,  # player d
+                Card.baron,  # player a draws this card
+                ]
         players = ['a', 'b', 'c', 'd']
         # The simplest case, player 'a' is dealt the princess and discards it
         # immediately, it might be that we should stop someone doing something
         # obviously stupid, but for now we just follow the rules:
         game = Game(players, deck=deck)
-        game.play_turn(Move('a', Card.princess))
+        game.play_turn('a,8,,')
         self.assertNotIn('a', game.players)
         expected_log = ("a:8\n"
                         "b:1\n"
@@ -922,17 +922,17 @@ class GameTest(unittest.TestCase):
 
         # Now we do a more interesting example in which a player is forced to
         # discard the princess via a prince card.
-        deck = [ Card.prince, # player a is dealt this card
-                 Card.guard, # player b is dealt this card
-                 Card.princess, # player c dealt
-                 Card.guard, # player d
-                 Card.baron, # player a draws this card
-                 ]
+        deck = [Card.prince,  # player a is dealt this card
+                Card.guard,  # player b is dealt this card
+                Card.princess,  # player c dealt
+                Card.guard,  # player d
+                Card.baron,  # player a draws this card
+                ]
         players = ['a', 'b', 'c', 'd']
         game = Game(players, deck=deck)
         # So player 'a' princes player 'c' and forces them to discard the
         # princess
-        game.play_turn(Move('a', Card.prince, nominated_player='c'))
+        game.play_turn('a,5,c,')
         self.assertNotIn('c', game.players)
         self.assertIn('c', game.out_players)
         expected_log = ("a:5\n"
@@ -959,7 +959,7 @@ class SelfConsistency(unittest.TestCase):
             if game.is_game_finished():
                 break
             possible_moves = game.available_moves()
-            game.play_turn(random.choice(possible_moves))
+            game.play_move(random.choice(possible_moves))
         return game
 
     def test_game(self):
