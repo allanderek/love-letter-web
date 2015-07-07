@@ -178,6 +178,7 @@ def format_none(value, format_fun=str):
     """
     return '' if value is None else format_fun(value)
 
+
 class Move(object):
     """A class for describing a move made in the game."""
 
