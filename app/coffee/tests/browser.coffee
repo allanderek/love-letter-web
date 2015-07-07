@@ -62,7 +62,7 @@ class BrowserTest
 class ChallengeTest extends BrowserTest
   names: ['ChallengeTest', 'challenge']
   description: "Tests the ability to create a game"
-  numTests: 5
+  numTests: 6
 
   testBody: (test) =>
     a_email = 'a@here.com'
@@ -96,6 +96,7 @@ class ChallengeTest extends BrowserTest
         game_addresses[player] = getPlayerGameLinkAddress player
 
     game_finished = false
+    internal_server_error = false
     casper.thenOpen serverUrl, =>
       rotateThroughPlayers = () =>
         for player in ['a', 'b', 'c', 'd']
@@ -110,14 +111,20 @@ class ChallengeTest extends BrowserTest
                 links = document.querySelectorAll('.playable-move a')
                 links[Math.floor(Math.random() * links.length)]
               casper.open(move_link.href)
-
+            h1_text = casper.fetchText 'h1'
+            if (h1_text.indexOf 'Internal Server Error') isnt -1
+              internal_server_error = true
             if casper.exists '.game-winner'
               game_finished = true
         casper.then ->
-          if not game_finished
+          if not game_finished and not internal_server_error
             rotateThroughPlayers()
       casper.then ->
         rotateThroughPlayers()
+      # Just to check that we are really finishing because the game is finished
+      # and not because of some error.
+      casper.then ->
+        test.assertTrue game_finished
 
 registerTest new ChallengeTest
 
