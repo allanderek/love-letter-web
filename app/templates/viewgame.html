@@ -36,7 +36,9 @@ Currently handmaided players are:
     {% endfor %}
 </ul>
 
-{% if your_turn %}
+{% if on_turn is not none %}
+<h1>It is your turn</h1>
+Your are holding the cards: {{on_turn[1]}} and {{on_turn[2]}}
 <ul>
     {% for move in possible_moves %}
         <li><span class='playable-move'><a href="{{url_for('playcard', game_no=db_game.game_id, secret=secret, card=move.card, nom_player=move.nominated_player, nom_card=move.nominated_card)}}">

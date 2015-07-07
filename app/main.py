@@ -98,12 +98,14 @@ def viewgame(game_no, secret):
         player = ''  # This way it won't be this player's turn.
     if not game.is_game_finished() and game.on_turn[0] == player:
         possible_moves = game.available_moves()
-        return flask.render_template('viewgame.html', db_game=db_game,
-                                     secret=secret, your_turn=True,
-                                     possible_moves=possible_moves)
+        on_turn = game.on_turn
     else:
-        return flask.render_template('viewgame.html', db_game=db_game,
-                                     your_turn=False)
+        possible_moves = []
+        on_turn = None
+    return flask.render_template('viewgame.html', db_game=db_game,
+                                 secret=secret, on_turn=game.on_turn,
+                                 your_hand=game.hands.get(player, None),
+                                 possible_moves=possible_moves)
 
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>')
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>')
