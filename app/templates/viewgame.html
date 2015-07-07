@@ -2,6 +2,10 @@
 
 {% block content %}
 
+<pre class='game-log'>
+    {{db_game.game.serialise_game()}}
+</pre>
+
 {% if db_game.game.is_game_finished() %}
   <h1>This Game is Finished</h1>
   {% if db_game.game.winner is plural %}
@@ -24,10 +28,6 @@
   {% endif %}
 
 {% else %}<!-- the game is not finished -->
-
-<pre class='game-log'>
-    {{db_game.game.serialise_game()}}
-</pre>
 
 Currently handmaided players are:
 <ul>

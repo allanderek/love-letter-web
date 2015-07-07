@@ -100,9 +100,17 @@ class ChallengeTest extends BrowserTest
       rotateThroughPlayers = () =>
         for player in ['a', 'b', 'c', 'd']
           casper.thenOpen game_addresses[player], =>
-            # test.assertExists '.game-log'
             if casper.exists '.playable-move a'
-              casper.thenClick '.playable-move a'
+              # We wish to collect a *random* link from the playable moves,
+              # we could just have `casper.thenClick '.playable-move a'` but
+              # this would also select the first available move, which would
+              # likely lead to missing some test scenarios. In particular you
+              # would only ever guard whilst guessing the princess.
+              move_link = casper.evaluate () ->
+                links = document.querySelectorAll('.playable-move a')
+                links[Math.floor(Math.random() * links.length)]
+              casper.open(move_link.href)
+
             if casper.exists '.game-winner'
               game_finished = true
         casper.then ->
