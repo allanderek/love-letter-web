@@ -233,6 +233,7 @@ class Game(object):
         self.players = players
         self.handmaided = set()
         self.out_players = set()
+        self.hands = dict()
         self.log = []
         self.winners = None
         self.winning_card = None
@@ -254,16 +255,21 @@ class Game(object):
                 self.discarded = discarded
 
             # Begin the game by dealing a card to each player
-            self.deal = [(p, self.deck.pop(0)) for p in self.players]
-            self.hands = {p: c for (p, c) in self.deal}
+            for p in self.players:
+                card = self.deck.pop(0)
+                self.hands[p] = card
+                self.log.append(PickupLog(p, card))
             # And drawing a card for the first player:
             self.draw_card()
         else:
             log_lines = log.split("\n")
-            self.deal = [self.parse_drawcard(l) for l in log_lines[:4]]
-            self.hands = {p: c for (p, c) in self.deal}
+            for l in log_lines[:4]:
+                player, card = self.parse_drawcard(l)
+                self.hands[player] = card
+                self.log.append(PickupLog(player, card))
+
             deck_lines = [self.parse_drawcard(l)
-                          for l in log_lines[5:] if ':' in l]
+                          for l in log_lines[4:] if ':' in l]
             play_lines = [self.parse_action(l) for l in log_lines if ',' in l]
 
             self.deck = [c for _, c in deck_lines]
@@ -277,8 +283,8 @@ class Game(object):
             # It is possible there is no discarded because all the cards were
             # used up. This would happen if we are loading the log of a game
             # that finished with someone playing the prince forcing someone
-            # else to take the discarded. So we have to check that the rest of
-            # the deck is not empty.
+            # else to take the discarded card. So we have to check that the
+            # rest of the deck is not empty.
             if rest_of_deck:
                 self.discarded = rest_of_deck.pop()
             self.deck += rest_of_deck
@@ -298,10 +304,7 @@ class Game(object):
                     nominated_player=nom_player, nominated_card=nom_card)
 
     def serialise_game(self):
-        result = "\n".join([p + ":" + str(c.value) for (p, c) in self.deal])
-        result += "\n\n"
-        result += "\n".join([l.to_log_string() for l in self.log])
-        return result
+        return "\n".join([l.to_log_string() for l in self.log])
 
     def take_top_card(self):
         return self.deck.pop(0)
@@ -629,7 +632,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:1\n"
                         "b:2\n"
                         "c:1\n"
-                        "d:2\n\n"
+                        "d:2\n"
                         "a:1\n"
                         "a,1,b,2\n"
                         "b-2\n"
@@ -661,7 +664,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:3\n"
                         "b:2\n"
                         "c:3\n"
-                        "d:7\n\n"
+                        "d:7\n"
                         "a:5\n"
                         "a,3,b,\n"
                         "b-2\n"
@@ -684,7 +687,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:3\n"
                         "b:2\n"
                         "c:3\n"
-                        "d:5\n\n"
+                        "d:5\n"
                         "a:5\n"
                         "a,3,d,")
         self.assertEqual(game.serialise_game(), expected_log)
@@ -743,7 +746,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:4\n"
                         "b:3\n"
                         "c:1\n"
-                        "d:7\n\n"
+                        "d:7\n"
                         "a:5\n"
                         "a,4,,\n"
                         "b:5\n"
@@ -790,7 +793,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:5\n"
                         "b:1\n"
                         "c:5\n"
-                        "d:1\n\n"
+                        "d:1\n"
                         "a:1\n"
                         "a,5,b,\n"
                         "b-1\n"
@@ -820,7 +823,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:5\n"
                         "b:1\n"
                         "c:5\n"
-                        "d:1\n\n"
+                        "d:1\n"
                         "a:1\n"
                         "a,5,b,\n"
                         "b-1\n"
@@ -842,7 +845,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:6\n"
                         "b:1\n"
                         "c:5\n"
-                        "d:8\n\n"
+                        "d:8\n"
                         "a:1\n"
                         "a,6,d,")
         self.assertEqual(game.serialise_game(), expected_log)
@@ -876,7 +879,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:4\n"
                         "b:4\n"
                         "c:4\n"
-                        "d:{0}\n\n"
+                        "d:{0}\n"
                         "a:1\n"
                         "a,4,,\n"
                         "b:1\n"
@@ -916,7 +919,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:7\n"
                         "b:1\n"
                         "c:1\n"
-                        "d:3\n\n"
+                        "d:3\n"
                         "a:{0}\n"
                         "a,7,,").format(str(prince_or_king.value))
         self.assertEqual(game.serialise_game(), expected_log)
@@ -942,7 +945,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:8\n"
                         "b:1\n"
                         "c:5\n"
-                        "d:1\n\n"
+                        "d:1\n"
                         "a:3\n"
                         "a,8,,")
         self.assertEqual(game.serialise_game(), expected_log)
@@ -965,7 +968,7 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:5\n"
                         "b:1\n"
                         "c:8\n"
-                        "d:1\n\n"
+                        "d:1\n"
                         "a:3\n"
                         "a,5,c,\n"
                         "c-8")
