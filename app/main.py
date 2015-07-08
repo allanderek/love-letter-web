@@ -205,6 +205,10 @@ class Move(object):
                               nom_card])
         return log_entry
 
+    def obscure(self, player):
+        """ Moves are always visible by everyone."""
+        return self
+
 
 class DiscardLog(object):
     def __init__(self, player, card):
@@ -214,6 +218,10 @@ class DiscardLog(object):
     def to_log_string(self):
         return '{0}-{1}'.format(self.player, self.card)
 
+    def obscure(self, player):
+        """Discards are always visible by everyone so this is simple."""
+        return self
+
 
 class PickupLog(object):
     def __init__(self, player, card):
@@ -222,6 +230,9 @@ class PickupLog(object):
 
     def to_log_string(self):
         return '{0}:{1}'.format(self.player, self.card)
+
+    def obscure(self, player):
+        return self if player == self.player else __class__(self.player, '?')
 
 
 PossibleMoves = namedtuple('PossibleMove', ["card", "moves"])
@@ -319,7 +330,7 @@ class Game(object):
            this means if you provide a player not in the game (eg. None) then
            this will return a log which hides all non-public information.
         """
-        return self.log
+        return [l.obscure(player) for l in self.log]
 
     def take_top_card(self):
         return self.deck.pop(0)
@@ -654,11 +665,11 @@ class GameTest(unittest.TestCase):
         expected_log = ("a:?\nb:2\nc:?\nd:?\na:?\na,1,b,2\nb-2\nc:?\nc,1,d,2\n"
                         "d-2\na:?\na,1,c,3\nc-3")
         self.assertEqual(game.serialise_game(player='b'), expected_log)
-        expected_log = ("a:1\nb:2\nc:1\nd:2\na:1\na,1,b,2\nb-2\nc:3\nc,1,d,2\n"
-                        "d-2\na:3\na,1,c,3\nc-3")
+        expected_log = ("a:?\nb:?\nc:1\nd:?\na:?\na,1,b,2\nb-2\nc:3\nc,1,d,2\n"
+                        "d-2\na:?\na,1,c,3\nc-3")
         self.assertEqual(game.serialise_game(player='c'), expected_log)
-        expected_log = ("a:1\nb:2\nc:1\nd:2\na:1\na,1,b,2\nb-2\nc:3\nc,1,d,2\n"
-                        "d-2\na:3\na,1,c,3\nc-3")
+        expected_log = ("a:?\nb:?\nc:?\nd:2\na:?\na,1,b,2\nb-2\nc:?\nc,1,d,2\n"
+                        "d-2\na:?\na,1,c,3\nc-3")
         self.assertEqual(game.serialise_game(player='d'), expected_log)
 
     def test_baron(self):
@@ -845,9 +856,9 @@ class GameTest(unittest.TestCase):
         self.assertEqual(game.serialise_game(), expected_log)
         expected_log = "a:5\nb:?\nc:?\nd:?\na:1\na,5,b,\nb-1\nb:?"
         self.assertEqual(game.serialise_game(player='a'), expected_log)
-        expected_log = "a:?\nb:1\nc:?\nd:?\na:1\na,5,b,\nb-1\nb:8"
+        expected_log = "a:?\nb:1\nc:?\nd:?\na:?\na,5,b,\nb-1\nb:8"
         self.assertEqual(game.serialise_game(player='b'), expected_log)
-        expected_log = "a:?\nb:?\nc:5\nd:?\na:1\na,5,b,\nb-1\nb:?"
+        expected_log = "a:?\nb:?\nc:5\nd:?\na:?\na,5,b,\nb-1\nb:?"
         self.assertEqual(game.serialise_game(player='c'), expected_log)
         expected_log = "a:?\nb:?\nc:?\nd:1\na:?\na,5,b,\nb-1\nb:?"
         self.assertEqual(game.serialise_game(player='d'), expected_log)
