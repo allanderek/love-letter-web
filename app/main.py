@@ -206,6 +206,24 @@ class Move(object):
         return log_entry
 
 
+class DiscardLog(object):
+    def __init__(self, player, card):
+        self.player = player
+        self.card = card
+
+    def to_log_string(self):
+        return '{0}-{1}'.format(self.player, self.card)
+
+
+class PickupLog(object):
+    def __init__(self, player, card):
+        self.player = player
+        self.card = card
+
+    def to_log_string(self):
+        return '{0}:{1}'.format(self.player, self.card)
+
+
 PossibleMoves = namedtuple('PossibleMove', ["card", "moves"])
 
 
@@ -282,7 +300,7 @@ class Game(object):
     def serialise_game(self):
         result = "\n".join([p + ":" + str(c.value) for (p, c) in self.deal])
         result += "\n\n"
-        result += "\n".join(self.log)
+        result += "\n".join([l.to_log_string() for l in self.log])
         return result
 
     def take_top_card(self):
@@ -299,7 +317,7 @@ class Game(object):
             player = self.players.pop(0)
             old_card = self.hands[player]
             self.on_turn = player, old_card, card
-            self.log.append(player + ":" + str(card.value))
+            self.log.append(PickupLog(player, card))
         else:
             raise GameFinished()
 
@@ -390,17 +408,17 @@ class Game(object):
         # logged.
         discard_logs = []
 
-        def log_discard(out_player, out_card):
-            discard_logs.append("{0}-{1}".format(out_player, out_card))
+        def log_discard(player, out_card):
+            discard_logs.append(DiscardLog(player, out_card))
 
         def log_extra_pickup(pickup_player, extra_card):
-            discard_logs.append("{0}:{1}".format(pickup_player, extra_card))
+            discard_logs.append(PickupLog(pickup_player, extra_card))
 
         def log_play():
             """ We define this as a method rather than simply doing this now,
                 because we may back out of this if the move is not valid.
             """
-            self.log.append(move.to_log_string())
+            self.log.append(move)
             for l in discard_logs:
                 self.log.append(l)
 
