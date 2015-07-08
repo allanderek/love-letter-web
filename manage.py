@@ -7,6 +7,7 @@ from app.main import application
 
 manager = Manager(application)
 
+
 def run_command(command):
     """ We frequently inspect the return result of a command so this is just
         a utility function to do this. Generally we call this as:
@@ -15,19 +16,23 @@ def run_command(command):
     result = os.system(command)
     return 0 if result == 0 else 1
 
+
 @manager.command
 def coffeelint():
     return run_command('coffeelint app/coffee')
 
+
 @manager.command
 def coffeebuild():
     return run_command('coffee -c -o app/static/compiled-js app/coffee')
+
 
 @manager.command
 def test_browser(name):
     """Run a single browser test, given its name (excluding `test_`)"""
     command = "python -m unittest app.browser_tests.test_{}".format(name)
     return run_command(command)
+
 
 @manager.command
 def test_casper(name=None):
@@ -38,16 +43,19 @@ def test_casper(name=None):
     result = phantom_test.test_run()
     return (0 if result == 0 else 1)
 
+
 @manager.command
 def test_main():
     """Run the python only tests defined within app/main.py"""
     return run_command("python -m unittest app.main")
+
 
 @manager.command
 def test():
     casper_result = test_casper()
     main_result = test_main()
     return max([casper_result, main_result])
+
 
 @manager.command
 def coverage(quick=False, browser=False, phantom=False):
@@ -71,13 +79,12 @@ def coverage(quick=False, browser=False, phantom=False):
 
     if os.path.exists('.coverage'):
         os.remove('.coverage')
-    os.system((
-            "COVERAGE_PROCESS_START='{0}' "
-            "coverage run manage.py {1}"
-            ).format(rcpath, manage_command))
+    os.system(("COVERAGE_PROCESS_START='{0}' "
+               "coverage run manage.py {1}").format(rcpath, manage_command))
     os.system("coverage combine")
     os.system("coverage report -m")
     os.system("coverage html")
+
 
 @manager.command
 def run_test_server():

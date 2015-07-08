@@ -14,6 +14,7 @@ logging.disable(logging.CRITICAL)
 
 from app.main import application
 
+
 class PhantomTest(unittest.TestCase):
 
     def __init__(self, methodName='runTest'):

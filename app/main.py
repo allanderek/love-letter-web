@@ -108,9 +108,10 @@ def viewgame(game_no, secret):
                                  your_hand=your_hand
                                  )
 
-@application.route('/playcard/<int:game_no>/<int:secret>/<int:card>')
-@application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>')
-@application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>/<int:nom_card>')
+
+@application.route('/playcard/<int:game_no>/<int:secret>/<int:card>')  # noqa
+@application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>')  # noqa
+@application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>/<int:nom_card>')  # noqa
 def playcard(game_no, secret, card, nom_player=None, nom_card=None):
     db_game = database.games[game_no]
     game = db_game.game
