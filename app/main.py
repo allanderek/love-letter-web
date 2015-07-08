@@ -303,8 +303,17 @@ class Game(object):
         return Move(fields[0], card,
                     nominated_player=nom_player, nominated_card=nom_card)
 
-    def serialise_game(self):
-        return "\n".join([l.to_log_string() for l in self.log])
+    def serialise_game(self, player=None):
+        log = self.log_for_player(player) if player else self.log
+        return "\n".join([l.to_log_string() for l in log])
+
+    def log_for_player(self, player):
+        """Returns a log sanitised by hiding information not available to
+           to everyone, unless it is available to the given player. Note that,
+           this means if you provide a player not in the game (eg. None) then
+           this will return a log which hides all non-public information.
+        """
+        return self.log
 
     def take_top_card(self):
         return self.deck.pop(0)
@@ -629,20 +638,22 @@ class GameTest(unittest.TestCase):
         game.play_turn('c,1,d,2')
         game.play_turn('a,1,c,3')
         self.assertEqual(game.players, ['a'])
-        expected_log = ("a:1\n"
-                        "b:2\n"
-                        "c:1\n"
-                        "d:2\n"
-                        "a:1\n"
-                        "a,1,b,2\n"
-                        "b-2\n"
-                        "c:3\n"
-                        "c,1,d,2\n"
-                        "d-2\n"
-                        "a:3\n"
-                        "a,1,c,3\n"
-                        "c-3")
+        expected_log = ("a:1\nb:2\nc:1\nd:2\na:1\na,1,b,2\nb-2\nc:3\nc,1,d,2\n"
+                        "d-2\na:3\na,1,c,3\nc-3")
         self.assertEqual(game.serialise_game(), expected_log)
+        # Now we do an expected log for each player.
+        expected_log = ("a:1\nb:?\nc:?\nd:?\na:1\na,1,b,2\nb-2\nc:?\nc,1,d,2\n"
+                        "d-2\na:3\na,1,c,3\nc-3")
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = ("a:?\nb:2\nc:?\nd:?\na:?\na,1,b,2\nb-2\nc:?\nc,1,d,2\n"
+                        "d-2\na:?\na,1,c,3\nc-3")
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = ("a:1\nb:2\nc:1\nd:2\na:1\na,1,b,2\nb-2\nc:3\nc,1,d,2\n"
+                        "d-2\na:3\na,1,c,3\nc-3")
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = ("a:1\nb:2\nc:1\nd:2\na:1\na,1,b,2\nb-2\nc:3\nc,1,d,2\n"
+                        "d-2\na:3\na,1,c,3\nc-3")
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
 
     def test_baron(self):
         """ This simply tests that the baron can knock a player out. We check
@@ -661,17 +672,16 @@ class GameTest(unittest.TestCase):
         game.play_turn('a,3,b,')
         game.play_turn('c,3,d,')
         self.assertEqual(game.players, ['d', 'a'])
-        expected_log = ("a:3\n"
-                        "b:2\n"
-                        "c:3\n"
-                        "d:7\n"
-                        "a:5\n"
-                        "a,3,b,\n"
-                        "b-2\n"
-                        "c:5\n"
-                        "c,3,d,\n"
-                        "c-5")
+        expected_log = "a:3\nb:2\nc:3\nd:7\na:5\na,3,b,\nb-2\nc:5\nc,3,d,\nc-5"
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = "a:3\nb:?\nc:?\nd:?\na:5\na,3,b,\nb-2\nc:?\nc,3,d,\nc-5"
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = "a:?\nb:2\nc:?\nd:?\na:?\na,3,b,\nb-2\nc:?\nc,3,d,\nc-5"
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = "a:?\nb:?\nc:3\nd:?\na:?\na,3,b,\nb-2\nc:5\nc,3,d,\nc-5"
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = "a:?\nb:?\nc:?\nd:7\na:?\na,3,b,\nb-2\nc:?\nc,3,d,\nc-5"
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
         deck = [Card.baron,  # player a is dealt this card
                 Card.priest,  # player b is dealt this card
                 Card.baron,  # player c is dealt this card
@@ -684,13 +694,16 @@ class GameTest(unittest.TestCase):
         game.play_turn('a,3,d,')
         # Both a and d still in the game due to the drawn baron showdown.
         self.assertEqual(game.players, ['b', 'c', 'd', 'a'])
-        expected_log = ("a:3\n"
-                        "b:2\n"
-                        "c:3\n"
-                        "d:5\n"
-                        "a:5\n"
-                        "a,3,d,")
+        expected_log = "a:3\nb:2\nc:3\nd:5\na:5\na,3,d,"
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = "a:3\nb:?\nc:?\nd:?\na:5\na,3,d,"
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = "a:?\nb:2\nc:?\nd:?\na:?\na,3,d,"
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = "a:?\nb:?\nc:3\nd:?\na:?\na,3,d,"
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = "a:?\nb:?\nc:?\nd:5\na:?\na,3,d,"
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
 
     def test_handmaid(self):
         """ There is actually no real test to do on the handmaid, if the
@@ -743,25 +756,26 @@ class GameTest(unittest.TestCase):
         self.assertEqual(['d', 'a'], game.players)
         self.assertEqual(Card.prince, game.hands['a'])
         self.assertEqual(Card.countess, game.hands['d'])
-        expected_log = ("a:4\n"
-                        "b:3\n"
-                        "c:1\n"
-                        "d:7\n"
-                        "a:5\n"
-                        "a,4,,\n"
-                        "b:5\n"
-                        "b,3,c,\n"
-                        "c-1\n"
-                        "d:1\n"
-                        "d,1,b,5\n"
-                        "b-5\n"
-                        "a:1\n"
-                        "a,1,d,8\n"
-                        "d:4\n"
-                        "d,4,,\n"
-                        "a:6\n"
+        expected_log = ("a:4\nb:3\nc:1\nd:7\na:5\na,4,,\nb:5\nb,3,c,\nc-1\n"
+                        "d:1\nd,1,b,5\nb-5\na:1\na,1,d,8\nd:4\nd,4,,\na:6\n"
                         "a,6,,")
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = ("a:4\nb:?\nc:?\nd:?\na:5\na,4,,\nb:?\nb,3,c,\nc-1\n"
+                        "d:?\nd,1,b,5\nb-5\na:1\na,1,d,8\nd:?\nd,4,,\na:6\n"
+                        "a,6,,")
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = ("a:?\nb:3\nc:?\nd:?\na:?\na,4,,\nb:5\nb,3,c,\nc-1\n"
+                        "d:?\nd,1,b,5\nb-5\na:?\na,1,d,8\nd:?\nd,4,,\na:?\n"
+                        "a,6,,")
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = ("a:?\nb:?\nc:1\nd:?\na:?\na,4,,\nb:?\nb,3,c,\nc-1\n"
+                        "d:?\nd,1,b,5\nb-5\na:?\na,1,d,8\nd:?\nd,4,,\na:?\n"
+                        "a,6,,")
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = ("a:?\nb:?\nc:?\nd:7\na:?\na,4,,\nb:?\nb,3,c,\nc-1\n"
+                        "d:1\nd,1,b,5\nb-5\na:?\na,1,d,8\nd:4\nd,4,,\na:?\n"
+                        "a,6,,")
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
 
     def test_prince(self):
         """ This tests the prince has the desired effect, we will also check
@@ -790,21 +804,22 @@ class GameTest(unittest.TestCase):
         self.assertEqual(game.hands['b'], Card.princess)
         self.assertEqual(game.hands['c'], Card.king)
         self.assertEqual(game.players, ['d', 'a', 'b', 'c'])
-        expected_log = ("a:5\n"
-                        "b:1\n"
-                        "c:5\n"
-                        "d:1\n"
-                        "a:1\n"
-                        "a,5,b,\n"
-                        "b-1\n"
-                        "b:8\n"
-                        "b:7\n"
-                        "b,7,,\n"
-                        "c:4\n"
-                        "c,5,c,\n"
-                        "c-4\n"
-                        "c:6")
+        expected_log = ("a:5\nb:1\nc:5\nd:1\na:1\na,5,b,\nb-1\nb:8\nb:7\n"
+                        "b,7,,\nc:4\nc,5,c,\nc-4\nc:6")
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = ("a:5\nb:?\nc:?\nd:?\na:1\na,5,b,\nb-1\nb:?\nb:?\n"
+                        "b,7,,\nc:?\nc,5,c,\nc-4\nc:?")
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = ("a:?\nb:1\nc:?\nd:?\na:?\na,5,b,\nb-1\nb:8\nb:7\n"
+                        "b,7,,\nc:?\nc,5,c,\nc-4\nc:?")
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = ("a:?\nb:?\nc:5\nd:?\na:?\na,5,b,\nb-1\nb:?\nb:?\n"
+                        "b,7,,\nc:4\nc,5,c,\nc-4\nc:6")
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = ("a:?\nb:?\nc:?\nd:1\na:?\na,5,b,\nb-1\nb:?\nb:?\n"
+                        "b,7,,\nc:?\nc,5,c,\nc-4\nc:?")
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
+
         # In another test we make sure that if you attempt to prince someone
         # on the last turn, when there are no cards left we make sure that the
         # card to be taken by the player is the originally discarded card
@@ -820,15 +835,16 @@ class GameTest(unittest.TestCase):
         game = Game(players, deck=deck, discarded=Card.princess)
         game.play_turn('a,5,b,')
         self.assertEqual(game.hands['b'], Card.princess)
-        expected_log = ("a:5\n"
-                        "b:1\n"
-                        "c:5\n"
-                        "d:1\n"
-                        "a:1\n"
-                        "a,5,b,\n"
-                        "b-1\n"
-                        "b:8")
+        expected_log = "a:5\nb:1\nc:5\nd:1\na:1\na,5,b,\nb-1\nb:8"
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = "a:5\nb:?\nc:?\nd:?\na:1\na,5,b,\nb-1\nb:?"
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = "a:?\nb:1\nc:?\nd:?\na:1\na,5,b,\nb-1\nb:8"
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = "a:?\nb:?\nc:5\nd:?\na:1\na,5,b,\nb-1\nb:?"
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = "a:?\nb:?\nc:?\nd:1\na:?\na,5,b,\nb-1\nb:?"
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
 
     def test_king(self):
         deck = [Card.king,  # player a is dealt this card
@@ -842,13 +858,16 @@ class GameTest(unittest.TestCase):
         game.play_turn('a,6,d,')
         self.assertEqual(game.hands['a'], Card.princess)
         self.assertEqual(game.hands['d'], Card.guard)
-        expected_log = ("a:6\n"
-                        "b:1\n"
-                        "c:5\n"
-                        "d:8\n"
-                        "a:1\n"
-                        "a,6,d,")
+        expected_log = "a:6\nb:1\nc:5\nd:8\na:1\na,6,d,"
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = "a:6\nb:?\nc:?\nd:?\na:1\na,6,d,"
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = "a:?\nb:1\nc:?\nd:?\na:?\na,6,d,"
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = "a:?\nb:?\nc:5\nd:?\na:?\na,6,d,"
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = "a:?\nb:?\nc:?\nd:8\na:?\na,6,d,"
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
 
     def check_handmaid_discard(self, discard):
         """ For the cards guard, priest, baron, and king if all other players
@@ -876,19 +895,21 @@ class GameTest(unittest.TestCase):
 
         game.play_turn('d,{0},,'.format(str(discard.value)))
         self.assertEqual(['a', 'b', 'c', 'd'], game.players)
-        expected_log = ("a:4\n"
-                        "b:4\n"
-                        "c:4\n"
-                        "d:{0}\n"
-                        "a:1\n"
-                        "a,4,,\n"
-                        "b:1\n"
-                        "b,4,,\n"
-                        "c:1\n"
-                        "c,4,,\n"
-                        "d:8\n"
-                        "d,{0},,").format(str(discard.value))
+        expected_log = ("a:4\nb:4\nc:4\nd:{0}\na:1\na,4,,\nb:1\nb,4,,\nc:1\n"
+                        "c,4,,\nd:8\nd,{0},,").format(str(discard.value))
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = ("a:4\nb:?\nc:?\nd:?\na:1\na,4,,\nb:?\nb,4,,\nc:?\n"
+                        "c,4,,\nd:?\nd,{0},,").format(str(discard.value))
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = ("a:?\nb:4\nc:?\nd:?\na:?\na,4,,\nb:1\nb,4,,\nc:?\n"
+                        "c,4,,\nd:?\nd,{0},,").format(str(discard.value))
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = ("a:?\nb:?\nc:4\nd:?\na:?\na,4,,\nb:?\nb,4,,\nc:1\n"
+                        "c,4,,\nd:?\nd,{0},,").format(str(discard.value))
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = ("a:?\nb:?\nc:?\nd:{0}\na:?\na,4,,\nb:?\nb,4,,\nc:?\n"
+                        "c,4,,\nd:8\nd,{0},,").format(str(discard.value))
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
 
     def test_handmaid_dicard(self):
         for card in [Card.guard, Card.priest, Card.baron, Card.king]:
@@ -916,13 +937,18 @@ class GameTest(unittest.TestCase):
         game.play_turn('a,7,,')
         self.assertEqual(game.hands['a'], prince_or_king)
         self.assertEqual(['b', 'c', 'd', 'a'], game.players)
-        expected_log = ("a:7\n"
-                        "b:1\n"
-                        "c:1\n"
-                        "d:3\n"
-                        "a:{0}\n"
+        expected_log = ("a:7\nb:1\nc:1\nd:3\na:{0}\n"
                         "a,7,,").format(str(prince_or_king.value))
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = ("a:7\nb:?\nc:?\nd:?\na:{0}\n"
+                        "a,7,,").format(str(prince_or_king.value))
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = "a:?\nb:1\nc:?\nd:?\na:?\na,7,,"
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = "a:?\nb:?\nc:1\nd:?\na:?\na,7,,"
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = "a:?\nb:?\nc:?\nd:3\na:?\na,7,,"
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
 
     def test_countess(self):
         self.check_countess(Card.prince)
@@ -942,13 +968,16 @@ class GameTest(unittest.TestCase):
         game = Game(players, deck=deck)
         game.play_turn('a,8,,')
         self.assertNotIn('a', game.players)
-        expected_log = ("a:8\n"
-                        "b:1\n"
-                        "c:5\n"
-                        "d:1\n"
-                        "a:3\n"
-                        "a,8,,")
+        expected_log = "a:8\nb:1\nc:5\nd:1\na:3\na,8,,"
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = "a:8\nb:?\nc:?\nd:?\na:3\na,8,,"
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = "a:?\nb:1\nc:?\nd:?\na:?\na,8,,"
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = "a:?\nb:?\nc:5\nd:?\na:?\na,8,,"
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = "a:?\nb:?\nc:?\nd:1\na:?\na,8,,"
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
 
         # Now we do a more interesting example in which a player is forced to
         # discard the princess via a prince card.
@@ -965,14 +994,16 @@ class GameTest(unittest.TestCase):
         game.play_turn('a,5,c,')
         self.assertNotIn('c', game.players)
         self.assertIn('c', game.out_players)
-        expected_log = ("a:5\n"
-                        "b:1\n"
-                        "c:8\n"
-                        "d:1\n"
-                        "a:3\n"
-                        "a,5,c,\n"
-                        "c-8")
+        expected_log = "a:5\nb:1\nc:8\nd:1\na:3\na,5,c,\nc-8"
         self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = "a:5\nb:?\nc:?\nd:?\na:3\na,5,c,\nc-8"
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = "a:?\nb:1\nc:?\nd:?\na:?\na,5,c,\nc-8"
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = "a:?\nb:?\nc:8\nd:?\na:?\na,5,c,\nc-8"
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = "a:?\nb:?\nc:?\nd:1\na:?\na,5,c,\nc-8"
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
 
 
 class SelfConsistency(unittest.TestCase):
