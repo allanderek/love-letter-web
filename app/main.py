@@ -304,6 +304,12 @@ class Game(object):
                     nominated_player=nom_player, nominated_card=nom_card)
 
     def serialise_game(self, player=None):
+        """ Serialise the game, if player is given then the serialised log is
+        sanitised such that the player cannot see information that they should
+        not. However, this is mostly for testing purposes, in general
+        serialise_game is used internally to store the game in the database and
+        not to pass information to the players.
+        """
         log = self.log_for_player(player) if player else self.log
         return "\n".join([l.to_log_string() for l in log])
 
