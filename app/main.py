@@ -341,15 +341,17 @@ class Game(object):
             a log.
         """
         assert self.on_turn is None
-        if card is None and self.deck and len(self.players) > 1:
-            card = self.take_top_card()
-        if card is not None:
-            player = self.players.pop(0)
-            old_card = self.hands[player]
-            self.on_turn = player, old_card, card
-            self.log.append(PickupLog(player, card))
-        else:
-            raise GameFinished()
+        if card is None:
+            if self.is_game_finished():
+                raise GameFinished()
+            else:
+                card = self.take_top_card()
+        player = self.players.pop(0)
+        # If the player is handmaided, they are now not handmaided.
+        self.handmaided.discard(player)
+        old_card = self.hands[player]
+        self.on_turn = player, old_card, card
+        self.log.append(PickupLog(player, card))
 
     def live_players(self):
         if self.on_turn is None:
@@ -462,9 +464,6 @@ class Game(object):
         if card not in [card_one, card_two]:
             raise Exception("Illegal attempt to play a card you do not have.")
         kept_card = card_two if card == card_one else card_one
-
-        # If the player is handmaided, they are now not handmaided.
-        self.handmaided.discard(player)
 
         if card == Card.guard:
             if nominated_player is None:
