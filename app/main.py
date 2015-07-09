@@ -104,7 +104,8 @@ def viewgame(game_no, secret):
         possible_moves = None
         your_hand = game.hands.get(player, None)  # Might not be in the game.
     return flask.render_template('viewgame.html', db_game=db_game,
-                                 secret=secret, possible_moves=possible_moves,
+                                 secret=secret, player=player,
+                                 possible_moves=possible_moves,
                                  your_hand=your_hand
                                  )
 

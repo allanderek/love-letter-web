@@ -2,9 +2,11 @@
 
 {% block content %}
 
-<pre class='game-log'>
-    {{db_game.game.serialise_game()}}
-</pre>
+<div class='game-log'>
+    {% for log_entry in db_game.game.log_for_player(player=player) %}
+        <div>{{log_entry.to_log_string()}}</div>
+    {% endfor %}
+</div>
 
 {% if db_game.game.is_game_finished() %}
   <h1>This Game is Finished</h1>
