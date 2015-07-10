@@ -236,6 +236,21 @@ class PickupLog(object):
         return self if player == self.player else __class__(self.player, '?')
 
 
+class PriestLog(object):
+    def __init__(self, player_shows, player_sees, card):
+        self.player_shows = player_shows
+        self.player_sees = player_sees
+        self.card = card
+
+    def to_log_string(self):
+        return ';'.join([self.player_shows, self.player_sees, self.card])
+
+    def obscure(self, player):
+        if player in [self.player_shows, self.player_sees]:
+            return self
+        else:
+            return __class__(self.player_shows, self.player_sees, '?')
+
 PossibleMoves = namedtuple('PossibleMove', ["card", "moves"])
 
 
@@ -670,6 +685,33 @@ class GameTest(unittest.TestCase):
         self.assertEqual(game.serialise_game(player='c'), expected_log)
         expected_log = ("a:?\nb:?\nc:?\nd:2\na:?\na,1,b,2\nb-2\nc:?\nc,1,d,2\n"
                         "d-2\na:?\na,1,c,3\nc-3")
+        self.assertEqual(game.serialise_game(player='d'), expected_log)
+
+    def test_priest(self):
+        """ Priests do not really affect the game state, all it means is that
+        one player now knows what another player currently holds. However we
+        can check the log is correctly updated with this information, since the
+        log will be shown to each player.
+        """
+        deck = [Card.priest,  # Player 1's dealt card
+                Card.countess,  # Player 2's dealt card
+                Card.guard,  # Player 3's dealt card
+                Card.king,  # Player 4's dealt card
+                Card.guard,  # Player 1's drawn card
+                ]
+        players = ['a', 'b', 'c', 'd']
+        game = Game(players, deck=deck)
+        game.play_turn('a,2,b,')
+        self.assertEqual(game.players, ['b', 'c', 'd', 'a'])
+        expected_log = "a:2\nb:7\nc:1\nd:6\na:1\na,2,b,\nb;a;7"
+        self.assertEqual(game.serialise_game(), expected_log)
+        expected_log = "a:2\nb:?\nc:?\nd:?\na:1\na,2,b,\nb;a;7"
+        self.assertEqual(game.serialise_game(player='a'), expected_log)
+        expected_log = "a:?\nb:7\nc:?\nd:?\na:?\na,2,b,\nb;a;7"
+        self.assertEqual(game.serialise_game(player='b'), expected_log)
+        expected_log = "a:?\nb:?\nc:1\nd:?\na:?\na,2,b,\nb;a;?"
+        self.assertEqual(game.serialise_game(player='c'), expected_log)
+        expected_log = "a:?\nb:?\nc:?\nd:6\na:?\na,2,b,\nb;a;?"
         self.assertEqual(game.serialise_game(player='d'), expected_log)
 
     def test_baron(self):
