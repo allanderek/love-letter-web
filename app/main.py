@@ -12,10 +12,11 @@ import flask_wtf
 from wtforms import HiddenField, IntegerField, StringField
 from wtforms.validators import DataRequired, Email
 
-
+class Configuration(object):
+    SECRET_KEY = b'7a\xe1f\x17\xc9C\xcb*\x85\xc1\x95G\x97\x03\xa3D\xd3F\xcf\x03\xf3\x99>'  # noqa
+    LIVE_SERVER_PORT = 5000
 application = flask.Flask(__name__)
-application.secret_key = b'7a\xe1f\x17\xc9C\xcb*\x85\xc1\x95G\x97\x03\xa3D\xd3F\xcf\x03\xf3\x99>'  # noqa
-application.live_server_port = 5000
+application.config.from_object(Configuration)
 
 
 @application.template_test('plural')

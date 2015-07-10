@@ -38,7 +38,7 @@ class PhantomTest(unittest.TestCase):
             return 1
 
     def _spawn_live_server(self):
-        self.port = application.live_server_port
+        self.port = application.config['LIVE_SERVER_PORT']
         self._server_url = 'http://localhost:{}'.format(self.port)
         command_line = 'python manage.py run_test_server'
         self._process = subprocess.Popen(shlex.split(command_line))

@@ -92,7 +92,7 @@ def run_test_server():
     # running the server in debug mode during testing fails for some reason
     application.DEBUG = False
     application.TESTING = True
-    port = application.live_server_port
+    port = application.config['LIVE_SERVER_PORT']
     application.run(port=port, use_reloader=False)
 
 if __name__ == "__main__":
