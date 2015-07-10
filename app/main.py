@@ -243,7 +243,8 @@ class PriestLog(object):
         self.card = card
 
     def to_log_string(self):
-        return ';'.join([self.player_shows, self.player_sees, self.card])
+        return '{0};{1};{2}'.format(self.player_shows, self.player_sees,
+                                    self.card)
 
     def obscure(self, player):
         if player in [self.player_shows, self.player_sees]:
@@ -505,10 +506,10 @@ class Game(object):
                     self.out_players.add(nominated_player)
 
         elif card == Card.priest:
-            # Not a lot to do here, we should perhaps log the fact that this
-            # person has been shown which card, but for now we just do nothing.
-            # However we have to check that you are not attempting to preist a
-            # player who is handmaided
+            # For a priest card we have to log who has been priested by whom,
+            # so that in the player's (the one priesting) log they will see the
+            # card shown to them. In addition of course we have to check that
+            # you are not attempting to preist a player who is handmaided
             if nominated_player is None:
                 if all_opponents_handmaided:
                     # That's fine then, we just discard the card and carry on
@@ -521,7 +522,12 @@ class Game(object):
                 raise Exception("You must baron a player still in the game.")
             elif nominated_player in self.handmaided:
                 raise Exception("You cannot baron a handmaided player.")
-            # Then we have an acceptable use of the priest card.
+            else:
+                # In this case we have a valid use of the priest card that is
+                # not simply discarding because all opponents are handmaided.
+                seen_card = self.hands[nominated_player]
+                log_entry = PriestLog(nominated_player, player, seen_card)
+                discard_logs.append(log_entry)
         elif card == Card.baron:
             if nominated_player is None:
                 if all_opponents_handmaided:
