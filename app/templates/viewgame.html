@@ -3,17 +3,17 @@
 {% block content %}
 
 <div class='game-log'>
-    {% for log_entry in db_game.game.log_for_player(player=player) %}
+    {% for log_entry in game.log_for_player(player=player) %}
         <div>{{log_entry.to_log_string()}}</div>
     {% endfor %}
 </div>
 
-{% if db_game.game.is_game_finished() %}
+{% if game.is_game_finished() %}
   <h1>This Game is Finished</h1>
-  {% if db_game.game.winner is plural %}
+  {% if game.winner is plural %}
     The winners are:
     <ul>
-        {% for p in db_game.game.winners %}
+        {% for p in game.winners %}
             <li><span class='game-winner'>{{p}}</span></li>
         {% endfor %}
     </ul>
@@ -24,7 +24,7 @@
        from the set without removing it, which we do not wish to do because
        other players may view this page (or you may even refresh.)
     #}
-    {% for p in db_game.game.winners %}
+    {% for p in game.winners %}
        <span class='game-winner'>{{p}}</span>
     {% endfor %}
   {% endif %}
@@ -33,7 +33,7 @@
 
 Currently handmaided players are:
 <ul>
-    {% for p in db_game.game.handmaided %}
+    {% for p in game.handmaided %}
      <li>{{p}}</li>
     {% endfor %}
 </ul>
@@ -44,7 +44,7 @@ Currently handmaided players are:
     <ul>
     {% for move in possible_moves[0].moves %}
         <li><span class='playable-move'>
-            <a href="{{url_for('playcard', game_no=db_game.game_id,
+            <a href="{{url_for('playcard', game_no=game_id,
                                secret=secret, card=move.card,
                                nom_player=move.nominated_player,
                                nom_card=move.nominated_card)}}">{{move.to_log_string()}}</a></span>
@@ -55,7 +55,7 @@ Currently handmaided players are:
     <ul>
     {% for move in possible_moves[1].moves %}
         <li><span class='playable-move'>
-            <a href="{{url_for('playcard', game_no=db_game.game_id,
+            <a href="{{url_for('playcard', game_no=game_id,
                                secret=secret, card=move.card,
                                nom_player=move.nominated_player,
                                nom_card=move.nominated_card)}}">{{move.to_log_string()}}</a></span>

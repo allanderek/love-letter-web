@@ -8,44 +8,66 @@ import unittest
 
 import flask
 from flask import request, url_for
+from flask.ext.sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import SQLAlchemyError
 import flask_wtf
 from wtforms import HiddenField, IntegerField, StringField
 from wtforms.validators import DataRequired, Email
 
+import os
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+
 class Configuration(object):
     SECRET_KEY = b'7a\xe1f\x17\xc9C\xcb*\x85\xc1\x95G\x97\x03\xa3D\xd3F\xcf\x03\xf3\x99>'  # noqa
     LIVE_SERVER_PORT = 5000
+    database_file = os.path.join(basedir, '../../db.sqlite')
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + database_file
 application = flask.Flask(__name__)
 application.config.from_object(Configuration)
+
+database = SQLAlchemy(application)
+
+
+class DBGame(database.Model):
+    id = database.Column(database.Integer, primary_key=True)
+    a_secret = database.Column(database.Integer)
+    b_secret = database.Column(database.Integer)
+    c_secret = database.Column(database.Integer)
+    d_secret = database.Column(database.Integer)
+    state_log = database.Column(database.String(2048))
+
+    def __init__(self, state_log):
+        self.a_secret = random.getrandbits(48)
+        self.b_secret = random.getrandbits(48)
+        self.c_secret = random.getrandbits(48)
+        self.d_secret = random.getrandbits(48)
+        self.players = ['a', 'b', 'c', 'd']
+        self.state_log = state_log
+
+    @property
+    def secrets(self):
+        return {self.a_secret: 'a',
+                self.b_secret: 'b',
+                self.c_secret: 'c',
+                self.d_secret: 'd'}
+
+    def is_player(self, secret):
+        return secret in self.secrets
+
+
+def create_database_game():
+    """ Create a game in the database. """
+    game = Game(['a', 'b', 'c', 'd'])
+    dbgame = DBGame(game.serialise_game())
+    database.session.add(dbgame)
+    database.session.commit()
+    return dbgame
 
 
 @application.template_test('plural')
 def is_plural(container):
     return len(container) > 1
-
-
-class Database(object):
-    """A temporary mock database."""
-    def __init__(self):
-        self.games = dict()
-
-    class DBGame(object):
-        def __init__(self, game_id):
-            self.game_id = game_id
-            players = ['a', 'b', 'c', 'd']
-            self.secrets = {random.getrandbits(48): p for p in players}
-            self.game = Game(players)
-
-        def is_player(self, secret):
-            return secret in self.secrets
-
-    def begin_game(self):
-        game_id = len(self.games)
-        db_game = self.DBGame(game_id)
-        self.games[game_id] = db_game
-        return db_game
-
-database = Database()
 
 
 def redirect_url(default='frontpage'):
@@ -74,11 +96,11 @@ class ChallengeForm(flask_wtf.Form):
 def challenge():
     form = ChallengeForm()
     if form.validate_on_submit():
-        db_game = database.begin_game()
+        db_game = create_database_game()
         result = """Game started, four players:
                     <ul>"""
         for secret, player in db_game.secrets.items():
-            url = url_for('viewgame', game_no=db_game.game_id, secret=secret)
+            url = url_for('viewgame', game_no=db_game.id, secret=secret)
             link = '<a id="{0}_player_link" href="{1}">View game player {0}</a>'
             link = link.format(player, url)
             secret_span_format = '<span id="{0}_secret">{1}</span>'
@@ -91,8 +113,12 @@ def challenge():
 
 @application.route('/viewgame/<int:game_no>/<int:secret>')
 def viewgame(game_no, secret):
-    db_game = database.games[game_no]
-    game = db_game.game
+    try:
+        db_game = database.session.query(DBGame).filter_by(id=game_no).one()
+    except SQLAlchemyError:
+        flask.flash("Game #{} not found".format(game_no))
+        return flask.redirect(redirect_url())
+    game = Game(players=['a', 'b', 'c', 'd'], log=db_game.state_log)
     try:
         player = db_game.secrets[secret]
     except KeyError:
@@ -104,7 +130,8 @@ def viewgame(game_no, secret):
     else:
         possible_moves = None
         your_hand = game.hands.get(player, None)  # Might not be in the game.
-    return flask.render_template('viewgame.html', db_game=db_game,
+    return flask.render_template('viewgame.html', game=game,
+                                 game_id=db_game.id,
                                  secret=secret, player=player,
                                  possible_moves=possible_moves,
                                  your_hand=your_hand
@@ -115,13 +142,17 @@ def viewgame(game_no, secret):
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>')  # noqa
 @application.route('/playcard/<int:game_no>/<int:secret>/<int:card>/<nom_player>/<int:nom_card>')  # noqa
 def playcard(game_no, secret, card, nom_player=None, nom_card=None):
-    db_game = database.games[game_no]
-    game = db_game.game
+    try:
+        db_game = database.session.query(DBGame).filter_by(id=game_no).one()
+    except SQLAlchemyError:
+        flask.flash("Game #{} not found".format(game_no))
+        return redirect('/')
+    game = Game(players=['a', 'b', 'c', 'd'], log=db_game.state_log)
     try:
         player = db_game.secrets[secret]
     except KeyError:
         flask.flash("You are not in this game! Secret key invalid.")
-        return redirect_url()
+        return flask.redirect(redirect_url())
     card = Card(int(card))
     nom_card = None if nom_card is None else Card(int(nom_card))
     move = Move(player, card, nominated_card=nom_card,
@@ -130,6 +161,9 @@ def playcard(game_no, secret, card, nom_player=None, nom_card=None):
         game.play_move(move)
     except NotYourTurnException:
         flask.flash("It's not your turn!")
+    else:
+        db_game.state_log = game.serialise_game()
+        database.session.commit()
     return flask.redirect(redirect_url())
 
 
