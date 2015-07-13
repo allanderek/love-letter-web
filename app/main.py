@@ -91,6 +91,14 @@ class ChallengeForm(flask_wtf.Form):
     c_email = StringField("P3's email", validators=[DataRequired(), Email()])
     d_email = StringField("P4's email", validators=[DataRequired(), Email()])
 
+    def get_mail(self, player):
+        """ A simple convenience function because Jinja2 does not have the
+        built-in method 'getattr'. This allows us to, for example, create the
+        challenge form via a loop.
+        """
+        assert player in ['a', 'b', 'c', 'd']
+        return getattr(self, player + '_email')
+
 
 @application.route('/challenge', methods=('GET', 'POST'))
 def challenge():
