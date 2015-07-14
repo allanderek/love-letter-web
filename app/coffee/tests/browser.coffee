@@ -59,16 +59,13 @@ class BrowserTest
   description: 'This class needs a description'
   numTests: 0
 
-class ChallengeTest extends BrowserTest
-  names: ['ChallengeTest', 'challenge']
-  description: "Tests the ability to create a game"
+class CompleteRandomGameTest extends BrowserTest
+  names: ['CompleteGame', 'randomgame']
+  description: "A full run of creating and completing a game, with random moves"
   numTests: 6
 
   testBody: (test) =>
-    a_email = 'a@here.com'
-    b_email = 'b@here.com'
-    c_email = 'c@here.com'
-    d_email = 'd@here.com'
+    neutral_game_address = null
     game_addresses = {a: null, b: null, c:null, d:null}
 
     getPlayerGameLinkAddress = (player) ->
@@ -77,23 +74,19 @@ class ChallengeTest extends BrowserTest
       serverUrl + suffix
 
     casper.thenOpen serverUrl, =>
-      test.assertExists '#challenge-link'
-    casper.thenClick '#challenge-link', ->
-      form_values =
-        'input[name="a_email"]' : a_email
-        'input[name="b_email"]' : b_email
-        'input[name="c_email"]' : c_email
-        'input[name="d_email"]' : d_email
-      # The final 'false' argument means that the form is not submitted.
-      @fillSelectors 'form', form_values, false
-
-    casper.thenClick '#send_challenge', =>
-      test.assertExists '#a_secret'
-      test.assertExists '#b_secret'
-      test.assertExists '#c_secret'
-      test.assertExists '#d_secret'
+      test.assertExists '#start-new-game-link'
+    casper.thenClick '#start-new-game-link', ->
+      neutral_game_address = casper.getCurrentUrl()
       for player in ['a', 'b', 'c', 'd']
-        game_addresses[player] = getPlayerGameLinkAddress player
+        test.assertExists ('#claim-player-' + player)
+
+    # Might need a casper.then for this otherwise 'neutral_game_address'
+    # will still be null when this is executed, because it won't be after
+    # the asynchronous code that fill in the address.
+    for player in ['a', 'b', 'c', 'd']
+      casper.thenOpen neutral_game_address, ->
+        casper.thenClick ('#claim-player-' + player), ->
+          game_addresses[player] = getPlayerGameLinkAddress player
 
     game_finished = false
     internal_server_error = false
@@ -110,7 +103,7 @@ class ChallengeTest extends BrowserTest
               move_link = casper.evaluate () ->
                 links = document.querySelectorAll('.playable-move a')
                 links[Math.floor(Math.random() * links.length)]
-              casper.open(move_link.href)
+              casper.open move_link.href
             h1_text = casper.fetchText 'h1'
             if (h1_text.indexOf 'Internal Server Error') isnt -1
               internal_server_error = true
@@ -125,9 +118,9 @@ class ChallengeTest extends BrowserTest
       # and not because of some error.
       casper.then ->
         test.assertTrue game_finished
+        test.assertFalse internal_server_error
 
-registerTest new ChallengeTest
-
+registerTest new CompleteRandomGameTest
 
 
 # helper functions
