@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block page_css %}
+<style>
+form {
+    border: solid 1px #E5E5E5;
+    background: #EEE;
+}
+
+input, textarea {
+    padding: 9px;
+    border: solid 1px #E5E5E5;
+    outline: 0;
+    font: normal 13px/100% Verdana, Tahoma, sans-serif;
+    width: 200px;
+    background: #FFFFFF;
+    }
+
+textarea {
+    width: 400px;
+    max-width: 400px;
+    height: 150px;
+    line-height: 150%;
+    }
+
+input:hover, textarea:hover,
+input:focus, textarea:focus {
+    border-color: #C9C9C9;
+    }
+
+form label {
+    margin-left: 10px;
+    color: #999999;
+    }
+
+submit input {
+    width: auto;
+    padding: 9px 15px;
+    background: #617798;
+    border: 0;
+    font-size: 14px;
+    color: #FFFFFF;
+}
+</style>
+{% endblock %}
+{% block content %}
+
+<ul>
+{% for player in ['a', 'b', 'c', 'd'] %}
+    <li>
+    <a id="claim-player-{{player}}"
+       href="{{url_for('joingame', game_no=db_game.id, player=player)}}">
+        Join as player {{player}}</a>
+    </li>
+{% endfor %}
+</ul>
+
+{% endblock %}

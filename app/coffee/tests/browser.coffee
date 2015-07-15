@@ -62,16 +62,11 @@ class BrowserTest
 class CompleteRandomGameTest extends BrowserTest
   names: ['CompleteGame', 'randomgame']
   description: "A full run of creating and completing a game, with random moves"
-  numTests: 6
+  numTests: 7
 
   testBody: (test) =>
     neutral_game_address = null
     game_addresses = {a: null, b: null, c:null, d:null}
-
-    getPlayerGameLinkAddress = (player) ->
-      link_selector = '#' + player + '_player_link'
-      suffix = casper.getElementAttribute link_selector, 'href'
-      serverUrl + suffix
 
     casper.thenOpen serverUrl, =>
       test.assertExists '#start-new-game-link'
@@ -80,13 +75,15 @@ class CompleteRandomGameTest extends BrowserTest
       for player in ['a', 'b', 'c', 'd']
         test.assertExists ('#claim-player-' + player)
 
-    # Might need a casper.then for this otherwise 'neutral_game_address'
-    # will still be null when this is executed, because it won't be after
-    # the asynchronous code that fill in the address.
-    for player in ['a', 'b', 'c', 'd']
-      casper.thenOpen neutral_game_address, ->
-        casper.thenClick ('#claim-player-' + player), ->
-          game_addresses[player] = getPlayerGameLinkAddress player
+    casper.then =>
+      claim_player = (player) ->
+        casper.thenOpen neutral_game_address, =>
+          casper.echo 'This is player----: ' + player
+          casper.thenClick ('#claim-player-' + player), =>
+            casper.echo 'This is player: ' + player
+            game_addresses[player] = casper.getCurrentUrl()
+      for player in ['a', 'b', 'c', 'd']
+        claim_player player
 
     game_finished = false
     internal_server_error = false

@@ -38,11 +38,10 @@ class DBGame(database.Model):
     state_log = database.Column(database.String(2048))
 
     def __init__(self, state_log):
-        self.a_secret = random.getrandbits(48)
-        self.b_secret = random.getrandbits(48)
-        self.c_secret = random.getrandbits(48)
-        self.d_secret = random.getrandbits(48)
-        self.players = ['a', 'b', 'c', 'd']
+        self.a_secret = None
+        self.b_secret = None
+        self.c_secret = None
+        self.d_secret = None
         self.state_log = state_log
 
     @property
@@ -51,6 +50,18 @@ class DBGame(database.Model):
                 self.b_secret: 'b',
                 self.c_secret: 'c',
                 self.d_secret: 'd'}
+
+    def player_taken(self, player):
+        return getattr(self, player + '_secret') is not None
+
+    def take_player(self, player):
+        attr = player + '_secret'
+        new_secret = random.getrandbits(48)
+        setattr(self, attr, new_secret)
+        return new_secret
+
+    def game_started(self):
+        return all([self.player_taken(p) for p in ['a', 'b', 'c', 'd']])
 
     def is_player(self, secret):
         return secret in self.secrets
@@ -85,53 +96,50 @@ def frontpage():
     return flask.render_template('frontpage.html')
 
 
-class ChallengeForm(flask_wtf.Form):
-    a_email = StringField("P1's email", validators=[DataRequired(), Email()])
-    b_email = StringField("P2's email", validators=[DataRequired(), Email()])
-    c_email = StringField("P3's email", validators=[DataRequired(), Email()])
-    d_email = StringField("P4's email", validators=[DataRequired(), Email()])
-
-    def get_mail(self, player):
-        """ A simple convenience function because Jinja2 does not have the
-        built-in method 'getattr'. This allows us to, for example, create the
-        challenge form via a loop.
-        """
-        assert player in ['a', 'b', 'c', 'd']
-        return getattr(self, player + '_email')
+@application.route('/startgame')
+def startgame():
+    # TODO: The only thing about this is, that I don't really want people
+    # accidentally refreshing and starting multiple games, though having said
+    # that, those open games should show up in the open-games list.
+    db_game = create_database_game()
+    url = flask.url_for('viewgame', game_no=db_game.id)
+    return flask.redirect(url)
 
 
-@application.route('/challenge', methods=('GET', 'POST'))
-def challenge():
-    form = ChallengeForm()
-    if form.validate_on_submit():
-        db_game = create_database_game()
-        result = """Game started, four players:
-                    <ul>"""
-        for secret, player in db_game.secrets.items():
-            url = url_for('viewgame', game_no=db_game.id, secret=secret)
-            link = '<a id="{0}_player_link" href="{1}">View game player {0}</a>'
-            link = link.format(player, url)
-            secret_span_format = '<span id="{0}_secret">{1}</span>'
-            secret_span = secret_span_format.format(player, secret)
-            result += "<li>" + link + secret_span + "</li>"
-        result += "</ul>"
-        return result
-    return flask.render_template("challenge.html", form=form)
-
-
-@application.route('/viewgame/<int:game_no>/<int:secret>')
-def viewgame(game_no, secret):
+@application.route('/joingame/<int:game_no>/<player>')
+def joingame(game_no, player):
     try:
         db_game = database.session.query(DBGame).filter_by(id=game_no).one()
     except SQLAlchemyError:
         flask.flash("Game #{} not found".format(game_no))
         return flask.redirect(redirect_url())
-    game = Game(players=['a', 'b', 'c', 'd'], log=db_game.state_log)
+    if db_game.player_taken(player):
+        flask.flash("Player {0} has already been taken!".format(player))
+        return flask.redirect(redirect_url())
+    new_secret = db_game.take_player(player)
+    database.session.commit()
+    # TODO: we have to actually tell the user about this URL.
+    url = flask.url_for('viewgame', game_no=db_game.id, secret=new_secret)
+    return flask.redirect(url)
+
+
+@application.route('/viewgame/<int:game_no>')  # noqa
+@application.route('/viewgame/<int:game_no>/<int:secret>')
+def viewgame(game_no, secret=None):
     try:
-        player = db_game.secrets[secret]
-    except KeyError:
-        flask.flash("You are not in this game! Secret key invalid.")
-        player = ''  # This way it won't be this player's turn.
+        db_game = database.session.query(DBGame).filter_by(id=game_no).one()
+    except SQLAlchemyError:
+        flask.flash("Game #{} not found".format(game_no))
+        return flask.redirect(redirect_url())
+    if not db_game.game_started():
+        return flask.render_template('joingame.html', db_game=db_game)
+    game = Game(players=['a', 'b', 'c', 'd'], log=db_game.state_log)
+    player = ''  # It won't be a blank player's turn
+    if secret is not None:
+        try:
+            player = db_game.secrets[secret]
+        except KeyError:
+            flask.flash("You are not in this game! Secret key invalid.")
     if not game.is_game_finished() and game.on_turn[0] == player:
         possible_moves = game.available_moves()
         your_hand = None  # The viewgame will use the possible_moves instead
