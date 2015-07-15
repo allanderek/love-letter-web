@@ -62,11 +62,10 @@ Currently handmaided players are:
             </li>
     {% endfor %}
     </ul>
+{% elif your_hand is not none %}
+It's not your turn. You are holding {{your_hand}}
 {% else %}
-It's not your turn.
-   {% if your_hand is not none %}
-    You are holding {{your_hand}}
-   {% endif %}
+Sorry, but you have been eliminated from this round.
 {% endif %}<!-- your_turn -->
 
 {% endif %}<!-- the game is finished, end of else branch -->
