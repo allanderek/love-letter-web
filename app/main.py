@@ -421,10 +421,8 @@ class Game(object):
         self.log.append(PickupLog(player, card))
 
     def live_players(self):
-        if self.on_turn is None:
-            return self.players
-        else:
-            return [self.on_turn[0]] + self.players
+        on_turn = [] if self.on_turn is None else [self.on_turn[0]]
+        return on_turn + self.players
 
     def is_game_finished(self):
         completed_deck = self.on_turn is None and not self.deck
