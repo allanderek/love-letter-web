@@ -519,6 +519,12 @@ class Game(object):
             for l in discard_logs:
                 self.log.append(l)
 
+        def eliminate_player(eliminated):
+            self.hands[eliminated] = None
+            self.out_players.add(eliminated)
+            if eliminated != player:
+                self.players.remove(eliminated)
+
         all_opponents_handmaided = all(p in self.handmaided
                                        for p in self.players)
 
@@ -551,8 +557,7 @@ class Game(object):
                 if nominated_card == nominated_players_card:
                     # Nominated player is out of the game
                     log_discard(nominated_player, self.hands[nominated_player])
-                    self.players.remove(nominated_player)
-                    self.out_players.add(nominated_player)
+                    eliminate_player(nominated_player)
 
         elif card == Card.priest:
             # For a priest card we have to log who has been priested by whom,
@@ -594,14 +599,11 @@ class Game(object):
                 opponents_card = self.hands[nominated_player]
                 if kept_card > opponents_card:
                     log_discard(nominated_player, opponents_card)
-                    self.players.remove(nominated_player)
-                    self.out_players.add(nominated_player)
+                    eliminate_player(nominated_player)
                 elif opponents_card > kept_card:
-                    # Do nothing, but the current player is out of the game so
-                    # we return without placing the current player in players
-                    # list but we do log the play though.
+                    # The current player is out of the game
                     log_discard(player, kept_card)
-                    self.out_players.add(player)
+                    eliminate_player(player)
                 # If the cards are equal nothing happens.
 
         elif card == Card.handmaid:
@@ -622,7 +624,7 @@ class Game(object):
                 log_discard(nominated_player, kept_card)
                 if kept_card == Card.princess:
                     # Oh oh, you're out of the game!
-                    self.out_players.add(player)
+                    eliminate_player(player)
                 else:
                     try:
                         new_card = self.take_top_card()
@@ -636,8 +638,7 @@ class Game(object):
                 if discarded == Card.princess:
                     # Oh oh, that player is forced to discard the princess and
                     # is hence out of the game.
-                    self.players.remove(nominated_player)
-                    self.out_players.add(nominated_player)
+                    eliminate_player(nominated_player)
                 else:
                     # Otherwise give them a new card. Note that if the deck is
                     # empty they are given the card that was discarded from the
