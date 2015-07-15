@@ -45,7 +45,7 @@ submit input {
 {% block content %}
 
 <ul>
-{% for player in ['a', 'b', 'c', 'd'] %}
+{% for player in ['a', 'b', 'c', 'd'] if not db_game.player_taken(player) %}
     <li>
     <a id="claim-player-{{player}}"
        href="{{url_for('joingame', game_no=db_game.id, player=player)}}">
