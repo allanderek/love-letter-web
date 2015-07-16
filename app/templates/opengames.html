@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<ul>
+{% for db_game in open_games %}
+    <li><a href="{{url_for('viewgame', game_no=db_game.id)}}">
+        Game number: {{db_game.id}}</a>
+    </li>
+{% endfor %}
+</ul>
+{% endblock %}

@@ -8,6 +8,7 @@ import unittest
 
 import flask
 from flask import request, url_for
+import sqlalchemy
 from flask.ext.sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import SQLAlchemyError
 import flask_wtf
@@ -104,6 +105,20 @@ def startgame():
     db_game = create_database_game()
     url = flask.url_for('viewgame', game_no=db_game.id)
     return flask.redirect(url)
+
+
+@application.route('/opengames')
+def opengames():
+    try:
+        filter = sqlalchemy.or_(DBGame.a_secret.is_(None),
+                                DBGame.b_secret.is_(None),
+                                DBGame.c_secret.is_(None),
+                                DBGame.d_secret.is_(None))
+        open_games = database.session.query(DBGame).filter(filter)
+    except SQLAlchemyError:
+        flask.flash("There was some database error. Sorry, our fault.")
+        return flask.redirect('/')
+    return flask.render_template('opengames.html', open_games=open_games)
 
 
 @application.route('/joingame/<int:game_no>/<player>')
