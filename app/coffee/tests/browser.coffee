@@ -78,9 +78,7 @@ class CompleteRandomGameTest extends BrowserTest
     casper.then =>
       claim_player = (player) ->
         casper.thenOpen neutral_game_address, =>
-          casper.echo 'This is player----: ' + player
           casper.thenClick ('#claim-player-' + player), =>
-            casper.echo 'This is player: ' + player
             game_addresses[player] = casper.getCurrentUrl()
       for player in ['a', 'b', 'c', 'd']
         claim_player player
