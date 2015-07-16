@@ -64,31 +64,31 @@ class CompleteRandomGameTest extends BrowserTest
   description: "A full run of creating and completing a game, with random moves"
   numTests: 7
 
-  testBody: (test) =>
+  testBody: (test) ->
     neutral_game_address = null
     game_addresses = {a: null, b: null, c:null, d:null}
 
-    casper.thenOpen serverUrl, =>
+    casper.thenOpen serverUrl, ->
       test.assertExists '#start-new-game-link'
     casper.thenClick '#start-new-game-link', ->
       neutral_game_address = casper.getCurrentUrl()
       for player in ['a', 'b', 'c', 'd']
         test.assertExists ('#claim-player-' + player)
 
-    casper.then =>
+    casper.then ->
       claim_player = (player) ->
-        casper.thenOpen neutral_game_address, =>
-          casper.thenClick ('#claim-player-' + player), =>
+        casper.thenOpen neutral_game_address, ->
+          casper.thenClick ('#claim-player-' + player), ->
             game_addresses[player] = casper.getCurrentUrl()
       for player in ['a', 'b', 'c', 'd']
         claim_player player
 
     game_finished = false
     internal_server_error = false
-    casper.thenOpen serverUrl, =>
-      rotateThroughPlayers = () =>
+    casper.thenOpen serverUrl, ->
+      rotateThroughPlayers = () ->
         for player in ['a', 'b', 'c', 'd']
-          casper.thenOpen game_addresses[player], =>
+          casper.thenOpen game_addresses[player], ->
             if casper.exists '.playable-move a'
               # We wish to collect a *random* link from the playable moves,
               # we could just have `casper.thenClick '.playable-move a'` but
