@@ -131,15 +131,18 @@ def viewgame(game_no, secret=None):
     except SQLAlchemyError:
         flask.flash("Game #{} not found".format(game_no))
         return flask.redirect(redirect_url())
-    if not db_game.game_started():
-        return flask.render_template('joingame.html', db_game=db_game)
-    game = Game(players=['a', 'b', 'c', 'd'], log=db_game.state_log)
     player = ''  # It won't be a blank player's turn
     if secret is not None:
         try:
             player = db_game.secrets[secret]
         except KeyError:
             flask.flash("You are not in this game! Secret key invalid.")
+
+    if not db_game.game_started():
+        already_joined = not (player == '')
+        return flask.render_template('joingame.html', db_game=db_game,
+                                     player_already_joined=already_joined)
+    game = Game(players=['a', 'b', 'c', 'd'], log=db_game.state_log)
     if not game.is_game_finished() and game.on_turn[0] == player:
         possible_moves = game.available_moves()
         your_hand = None  # The viewgame will use the possible_moves instead

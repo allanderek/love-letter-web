@@ -28,9 +28,7 @@
        <span class='game-winner'>{{p}}</span>
     {% endfor %}
   {% endif %}
-
-{% else %}<!-- the game is not finished -->
-
+{% else %} {# The game is not yet finished #}
 Currently handmaided players are:
 <ul>
     {% for p in game.handmaided %}

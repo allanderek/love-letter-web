@@ -44,14 +44,25 @@ submit input {
 {% endblock %}
 {% block content %}
 
-<ul>
-{% for player in ['a', 'b', 'c', 'd'] if not db_game.player_taken(player) %}
-    <li>
-    <a id="claim-player-{{player}}"
-       href="{{url_for('joingame', game_no=db_game.id, player=player)}}">
-        Join as player {{player}}</a>
-    </li>
-{% endfor %}
-</ul>
+{% if db_game.game_started() %}
+Sorry, this game has already filled all the players and started,
+you can spectate on it
+<a href="{{url_for('viewgame', game_no=db_game.id)}}">here.</a>
+{% elif player_already_joined %}
+{% set joingame_href = url_for('viewgame', game_no=db_game.id) %}
+Waiting for other players to join. If you want a friend to join send them this
+link: <a href="{{joingame_href}}">{{joingame_href}}</a>.
+Refresh to see if others have joined.
+{% else %} {# There are some players left to claim #}
+    <ul>
+    {% for player in ['a', 'b', 'c', 'd'] if not db_game.player_taken(player) %}
+        <li>
+        <a id="claim-player-{{player}}"
+           href="{{url_for('joingame', game_no=db_game.id, player=player)}}">
+            Join as player {{player}}</a>
+        </li>
+    {% endfor %}
+    </ul>
+{% endif %}
 
 {% endblock %}
