@@ -62,7 +62,7 @@ class BrowserTest
 class CompleteRandomGameTest extends BrowserTest
   names: ['CompleteGame', 'randomgame']
   description: "A full run of creating and completing a game, with random moves"
-  numTests: 7
+  numTests: 8
 
   testBody: (test) ->
     neutral_game_address = null
@@ -74,6 +74,13 @@ class CompleteRandomGameTest extends BrowserTest
       neutral_game_address = casper.getCurrentUrl()
       for player in ['a', 'b', 'c', 'd']
         test.assertExists ('#claim-player-' + player)
+
+    # Check that the new game exists in the list of open games
+    casper.thenOpen serverUrl + '/opengames', ->
+      # Basically the neutral game link without the serverUrl part
+      # as it will appear on the opengames page.
+      local_game_link = neutral_game_address.match(/\/viewgame\/[0-9]+/)[0]
+      test.assertExists ('a[href="' + local_game_link + '"]')
 
     casper.then ->
       claim_player = (player) ->
