@@ -62,7 +62,7 @@ class BrowserTest
 class CompleteRandomGameTest extends BrowserTest
   names: ['CompleteGame', 'randomgame']
   description: "A full run of creating and completing a game, with random moves"
-  numTests: 10
+  numTests: 14
 
   testBody: (test) ->
     neutral_game_address = null
@@ -137,6 +137,11 @@ class CompleteRandomGameTest extends BrowserTest
       casper.then ->
         test.assertTrue game_finished
         test.assertFalse internal_server_error
+        assertPlayerSeesFinished = (player) ->
+          casper.thenOpen game_addresses[player], ->
+            test.assertExists '.game-winner'
+        for player in ['a', 'b', 'c', 'd']
+          assertPlayerSeesFinished player
 
 registerTest new CompleteRandomGameTest
 
