@@ -65,7 +65,9 @@ Currently handmaided players are:
 It's not your turn. You are holding {{your_hand}}
 {% elif secret is not none %}
 {# You are in this game but you have been eliminated from this round. #}
+<div id="eliminated-explanation">
 Sorry, but you have been eliminated from this round.
+</div>
 {% else %}
 {# Finally you are not a part of this game, either you have made a mistake and
    attempted to view the game with an incorrect secret key, or, more likely,

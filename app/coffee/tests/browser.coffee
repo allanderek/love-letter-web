@@ -62,7 +62,7 @@ class BrowserTest
 class CompleteRandomGameTest extends BrowserTest
   names: ['CompleteGame', 'randomgame']
   description: "A full run of creating and completing a game, with random moves"
-  numTests: 14
+  numTests: 15
 
   testBody: (test) ->
     neutral_game_address = null
@@ -107,11 +107,20 @@ class CompleteRandomGameTest extends BrowserTest
     # Now we can simply iterate through the players taking turns until the
     # game finishes.
     game_finished = false
+    # We would like to be able to just assert that there is no internal
+    # server error, or game-logic error, but we won't know ahead of time how
+    # many such asserts, since the game may finish after 3 turns or through
+    # the whole deck.
     internal_server_error = false
+    game_logic_error = false
     casper.thenOpen serverUrl, ->
       rotateThroughPlayers = () ->
         for player in ['a', 'b', 'c', 'd']
           casper.thenOpen game_addresses[player], ->
+            h1_text = casper.fetchText 'h1'
+            if (h1_text.indexOf 'Internal Server Error') isnt -1
+              internal_server_error = true
+
             if casper.exists '.playable-move a'
               # We wish to collect a *random* link from the playable moves,
               # we could just have `casper.thenClick '.playable-move a'` but
@@ -122,11 +131,10 @@ class CompleteRandomGameTest extends BrowserTest
                 links = document.querySelectorAll('.playable-move a')
                 links[Math.floor(Math.random() * links.length)]
               casper.open move_link.href
-            h1_text = casper.fetchText 'h1'
-            if (h1_text.indexOf 'Internal Server Error') isnt -1
-              internal_server_error = true
-            if casper.exists '.game-winner'
+            else if casper.exists '.game-winner'
               game_finished = true
+            else if not casper.exists '#eliminated-explanation'
+              game_logic_error = true
         casper.then ->
           if not game_finished and not internal_server_error
             rotateThroughPlayers()
@@ -137,6 +145,7 @@ class CompleteRandomGameTest extends BrowserTest
       casper.then ->
         test.assertTrue game_finished
         test.assertFalse internal_server_error
+        test.assertFalse game_logic_error
         assertPlayerSeesFinished = (player) ->
           casper.thenOpen game_addresses[player], ->
             test.assertExists '.game-winner'
