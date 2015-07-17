@@ -50,9 +50,11 @@ you can spectate on it
 <a href="{{url_for('viewgame', game_no=db_game.id)}}">here.</a>
 {% elif player_already_joined %}
 {% set joingame_href = url_for('viewgame', game_no=db_game.id) %}
+<div id="waiting-explanation">
 Waiting for other players to join. If you want a friend to join send them this
 link: <a href="{{joingame_href}}">{{joingame_href}}</a>.
 Refresh to see if others have joined.
+</div>
 {% else %} {# There are some players left to claim #}
     <ul>
     {% for player in ['a', 'b', 'c', 'd'] if not db_game.player_taken(player) %}

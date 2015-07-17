@@ -62,7 +62,7 @@ class BrowserTest
 class CompleteRandomGameTest extends BrowserTest
   names: ['CompleteGame', 'randomgame']
   description: "A full run of creating and completing a game, with random moves"
-  numTests: 8
+  numTests: 9
 
   testBody: (test) ->
     neutral_game_address = null
@@ -82,12 +82,21 @@ class CompleteRandomGameTest extends BrowserTest
       local_game_link = neutral_game_address.match(/\/viewgame\/[0-9]+/)[0]
       test.assertExists ('a[href="' + local_game_link + '"]')
 
+    claim_player = (player) ->
+      casper.thenOpen neutral_game_address, ->
+        casper.thenClick ('#claim-player-' + player), ->
+          game_addresses[player] = casper.getCurrentUrl()
+
     casper.then ->
-      claim_player = (player) ->
-        casper.thenOpen neutral_game_address, ->
-          casper.thenClick ('#claim-player-' + player), ->
-            game_addresses[player] = casper.getCurrentUrl()
-      for player in ['a', 'b', 'c', 'd']
+      # We claim player a separately so that we can check that when 'a' views
+      # the game before the others have claimed their places we are told that
+      # the game has not yet started.
+      claim_player 'a'
+    casper.then ->
+      casper.thenOpen game_addresses['a'], ->
+        debug_dump_html()
+        test.assertExists '#waiting-explanation'
+      for player in ['b', 'c', 'd']
         claim_player player
 
     game_finished = false
