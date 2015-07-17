@@ -152,6 +152,7 @@ def viewgame(game_no, secret=None):
             player = db_game.secrets[secret]
         except KeyError:
             flask.flash("You are not in this game! Secret key invalid.")
+            secret = None
 
     if not db_game.game_started():
         already_joined = not (player == '')

@@ -61,9 +61,24 @@ Currently handmaided players are:
     {% endfor %}
     </ul>
 {% elif your_hand is not none %}
+{# You are in this game, and have not yet been eliminated from this round. #}
 It's not your turn. You are holding {{your_hand}}
-{% else %}
+{% elif secret is not none %}
+{# You are in this game but you have been eliminated from this round. #}
 Sorry, but you have been eliminated from this round.
+{% else %}
+{# Finally you are not a part of this game, either you have made a mistake and
+   attempted to view the game with an incorrect secret key, or, more likely,
+   you are attempting to join a game but it is now full. For example your friend
+   may have mailed you the join link, or you might have seen it on the opengames
+   list, but in the meantime the game has been filled. Either way you are now
+   a spectator.
+#}
+<div id="spectating-explanation">
+You are spectating on this game. If you expected to be a part of it, you may
+have gotten the secret part of the address incorrect, or you're still hitting
+the link to join the game.
+</div>
 {% endif %}<!-- your_turn -->
 
 {% endif %}<!-- the game is finished, end of else branch -->

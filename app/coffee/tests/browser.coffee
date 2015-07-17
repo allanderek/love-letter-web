@@ -62,7 +62,7 @@ class BrowserTest
 class CompleteRandomGameTest extends BrowserTest
   names: ['CompleteGame', 'randomgame']
   description: "A full run of creating and completing a game, with random moves"
-  numTests: 9
+  numTests: 10
 
   testBody: (test) ->
     neutral_game_address = null
@@ -94,11 +94,18 @@ class CompleteRandomGameTest extends BrowserTest
       claim_player 'a'
     casper.then ->
       casper.thenOpen game_addresses['a'], ->
-        debug_dump_html()
         test.assertExists '#waiting-explanation'
       for player in ['b', 'c', 'd']
         claim_player player
 
+    # Now we check that if another player attempts to join the game,
+    # they cannot.
+    casper.then ->
+      casper.thenOpen neutral_game_address, ->
+        test.assertExists '#spectating-explanation'
+
+    # Now we can simply iterate through the players taking turns until the
+    # game finishes.
     game_finished = false
     internal_server_error = false
     casper.thenOpen serverUrl, ->
