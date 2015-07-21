@@ -98,6 +98,19 @@ class CompleteRandomGameTest extends BrowserTest
       for player in ['b', 'c', 'd']
         claim_player player
 
+    # Now we check that a player viewing the game can change their name.
+    casper.then ->
+      casper.thenOpen game_addresses['a'], ->
+        test.assertExists '#secret-configuration'
+        form_values = 'input[name="nickname"]' : 'Donatello'
+        # The final 'true' argument means that the form is submitted.
+        @fillSelectors 'form#secret-update-profile', form_values, true
+      casper.then ->
+        test.assertExists '.players-nick'
+        test.assertSelectorHasText '.players-nick', 'Donatello'
+        # players_nick = casper.fetchText '.players-nick'
+        # test.assertEqual players_nick 'Donatello'
+
     # Now we check that if another player attempts to join the game,
     # they cannot.
     casper.then ->

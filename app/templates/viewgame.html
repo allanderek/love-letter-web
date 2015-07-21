@@ -2,87 +2,123 @@
 
 {% block content %}
 
-<div class='game-log'>
-    {% for log_entry in game.log_for_player(player=player) %}
-        <div>{{log_entry.to_log_string()}}</div>
-    {% endfor %}
-</div>
+{% if secret is not none %}
+    {# So we have a valid player that may update their profile #}
+    <div id="secret-configuration">
+    <form id="secret-update-profile"
+              method="POST"
+              action="{{ url_for('updateprofile', game_no=db_game.id, secret=secret) }}">
+            {{ profile_form.hidden_tag() }}
+            {{ profile_form.nickname.label }} {{ profile_form.nickname() }}
+            <button type="submit"
+                    class="comment_button" name='comment_button'>Comment</button>
+        </form>
+    </div>
+<div class="players-nick"></div>
+{% endif %} {# The secret is not none #}
 
-{% if game.is_game_finished() %}
-  <h1>This Game is Finished</h1>
-  {% if game.winner is plural %}
-    The winners are:
-    <ul>
+{% if game is none %} {# This means the game has not yet started #}
+    {% if secret is none %} {# Player has not joined the game #}
+        <ul>
+        {% for player in ['a', 'b', 'c', 'd'] if not db_game.player_taken(player) %}
+            <li>
+            <a id="claim-player-{{player}}"
+               href="{{url_for('joingame', game_no=db_game.id, player=player)}}">
+                Join as player {{player}}</a>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %} {# Player has already joined the game #}
+        {% set joingame_href = url_for('viewgame', game_no=db_game.id) %}
+        <div id="waiting-explanation">
+        Waiting for other players to join. If you want a friend to join send
+        them this link: <a href="{{joingame_href}}">{{joingame_href}}</a>.
+        Refresh to see if others have joined.
+        </div>
+    {% endif %} {# End of is secret none, player not yet joined game. #}
+{% else %} {# The game has started, might be finished #}
+    {# Whether the game is finished or not we show the log #}
+    <div class='game-log'>
+        {% for log_entry in game.log_for_player(player=player) %}
+            <div>{{log_entry.to_log_string()}}</div>
+        {% endfor %}
+    </div>
+    {% if game.is_game_finished() %} {# Game has started and is finished #}
+      <h1>This Game is Finished</h1>
+      {% if game.winner is plural %}
+        The winners are:
+        <ul>
+            {% for p in game.winners %}
+                <li><span class='game-winner'>{{p}}</span></li>
+            {% endfor %}
+        </ul>
+      {% else %}
+      The winner is:
+        {# The loop seems spurious since we know there is exactly one
+           element, but there is no simple way to take the singleton element
+           from the set without removing it, which we do not wish to do because
+           other players may view this page (or you may even refresh.)
+        #}
         {% for p in game.winners %}
-            <li><span class='game-winner'>{{p}}</span></li>
+           <span class='game-winner'>{{p}}</span>
+        {% endfor %}
+      {% endif %} {# number of winners if #}
+    {% else %} {# The game is not yet finished but has started #}
+    Currently handmaided players are:
+    <ul>
+        {% for p in game.handmaided %}
+         <li>{{p}}</li>
         {% endfor %}
     </ul>
-  {% else %}
-  The winner is:
-    {# The loop seems spurious since we know there is exactly one
-       element, but there is no simple way to take the singleton element
-       from the set without removing it, which we do not wish to do because
-       other players may view this page (or you may even refresh.)
-    #}
-    {% for p in game.winners %}
-       <span class='game-winner'>{{p}}</span>
-    {% endfor %}
-  {% endif %}
-{% else %} {# The game is not yet finished #}
-Currently handmaided players are:
-<ul>
-    {% for p in game.handmaided %}
-     <li>{{p}}</li>
-    {% endfor %}
-</ul>
 
-{% if possible_moves is not none %}
-<h1>It is your turn</h1>
-<h2>Card One: {{possible_moves[0].card}}</h2>
-    <ul>
-    {% for move in possible_moves[0].moves %}
-        <li><span class='playable-move'>
-            <a href="{{url_for('playcard', game_no=game_id,
-                               secret=secret, card=move.card,
-                               nom_player=move.nominated_player,
-                               nom_card=move.nominated_card)}}">{{move.to_log_string()}}</a></span>
-            </li>
-    {% endfor %}
-    </ul>
-<h2>Card Two: {{possible_moves[1].card}}</h2>
-    <ul>
-    {% for move in possible_moves[1].moves %}
-        <li><span class='playable-move'>
-            <a href="{{url_for('playcard', game_no=game_id,
-                               secret=secret, card=move.card,
-                               nom_player=move.nominated_player,
-                               nom_card=move.nominated_card)}}">{{move.to_log_string()}}</a></span>
-            </li>
-    {% endfor %}
-    </ul>
-{% elif your_hand is not none %}
-{# You are in this game, and have not yet been eliminated from this round. #}
-It's not your turn. You are holding {{your_hand}}
-{% elif secret is not none %}
-{# You are in this game but you have been eliminated from this round. #}
-<div id="eliminated-explanation">
-Sorry, but you have been eliminated from this round.
-</div>
-{% else %}
-{# Finally you are not a part of this game, either you have made a mistake and
-   attempted to view the game with an incorrect secret key, or, more likely,
-   you are attempting to join a game but it is now full. For example your friend
-   may have mailed you the join link, or you might have seen it on the opengames
-   list, but in the meantime the game has been filled. Either way you are now
-   a spectator.
-#}
-<div id="spectating-explanation">
-You are spectating on this game. If you expected to be a part of it, you may
-have gotten the secret part of the address incorrect, or you're still hitting
-the link to join the game.
-</div>
-{% endif %}<!-- your_turn -->
+        {% if possible_moves is not none %}
+        <h1>It is your turn</h1>
+        <h2>Card One: {{possible_moves[0].card}}</h2>
+            <ul>
+            {% for move in possible_moves[0].moves %}
+                <li><span class='playable-move'>
+                    <a href="{{url_for('playcard', game_no=game_id,
+                                       secret=secret, card=move.card,
+                                       nom_player=move.nominated_player,
+                                       nom_card=move.nominated_card)}}">{{move.to_log_string()}}</a></span>
+                    </li>
+            {% endfor %}
+            </ul>
+        <h2>Card Two: {{possible_moves[1].card}}</h2>
+            <ul>
+            {% for move in possible_moves[1].moves %}
+                <li><span class='playable-move'>
+                    <a href="{{url_for('playcard', game_no=game_id,
+                                       secret=secret, card=move.card,
+                                       nom_player=move.nominated_player,
+                                       nom_card=move.nominated_card)}}">{{move.to_log_string()}}</a></span>
+                    </li>
+            {% endfor %}
+            </ul>
+        {% elif your_hand is not none %}
+        {# You are in this game, and have not yet been eliminated from this round. #}
+        It's not your turn. You are holding {{your_hand}}
+        {% elif secret is not none %}
+        {# You are in this game but you have been eliminated from this round. #}
+        <div id="eliminated-explanation">
+        Sorry, but you have been eliminated from this round.
+        </div>
+        {% else %}
+        {# Finally you are not a part of this game, either you have made a mistake and
+           attempted to view the game with an incorrect secret key, or, more likely,
+           you are attempting to join a game but it is now full. For example your friend
+           may have mailed you the join link, or you might have seen it on the opengames
+           list, but in the meantime the game has been filled. Either way you are now
+           a spectator.
+        #}
+        <div id="spectating-explanation">
+        You are spectating on this game. If you expected to be a part of it, you may
+        have gotten the secret part of the address incorrect, or you're still hitting
+        the link to join the game.
+        </div>
+        {% endif %}{# your_turn end of else branch #}
 
-{% endif %}<!-- the game is finished, end of else branch -->
+    {% endif %}{# the game is finished, end of else branch #}
+{% endif %}{# The game has not started, end of else branch #}
 
-{% endblock %}
+{% endblock %} {# content block #}

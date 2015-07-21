@@ -138,6 +138,16 @@ def joingame(game_no, player):
     return flask.redirect(url)
 
 
+class SecretProfileForm(flask_wtf.Form):
+    nickname = StringField("Your new display name", validators=[DataRequired()])
+
+
+@application.route('/updateprofile/<int:game_no>/<int:secret>',
+                   methods=['POST'])
+def updateprofile(game_no, secret):
+    return flask.redirect(redirect_url())
+
+
 @application.route('/viewgame/<int:game_no>')  # noqa
 @application.route('/viewgame/<int:game_no>/<int:secret>')
 def viewgame(game_no, secret=None):
@@ -147,26 +157,33 @@ def viewgame(game_no, secret=None):
         flask.flash("Game #{} not found".format(game_no))
         return flask.redirect(redirect_url())
     player = ''  # It won't be a blank player's turn
+    profile_form = None
     if secret is not None:
         try:
             player = db_game.secrets[secret]
         except KeyError:
             flask.flash("You are not in this game! Secret key invalid.")
             secret = None
+        else:
+            profile_form = SecretProfileForm()
 
-    if not db_game.game_started():
-        already_joined = not (player == '')
-        return flask.render_template('joingame.html', db_game=db_game,
-                                     player_already_joined=already_joined)
-    game = Game(players=['a', 'b', 'c', 'd'], log=db_game.state_log)
-    if not game.is_game_finished() and game.on_turn[0] == player:
-        possible_moves = game.available_moves()
-        your_hand = None  # The viewgame will use the possible_moves instead
-    else:
-        possible_moves = None
-        your_hand = game.hands.get(player, None)  # Might not be in the game.
-    return flask.render_template('viewgame.html', game=game,
-                                 game_id=db_game.id,
+    # if not db_game.game_started():
+    #     already_joined = not (player == '')
+    #     return flask.render_template('joingame.html', db_game=db_game,
+    #                                  player_already_joined=already_joined)
+    game = None
+    possible_moves = None
+    your_hand = None
+    if db_game.game_started():
+        game = Game(players=['a', 'b', 'c', 'd'], log=db_game.state_log)
+        if not game.is_game_finished() and game.on_turn[0] == player:
+            possible_moves = game.available_moves()
+            your_hand = None  # The viewgame will use the possible_moves instead
+        else:
+            possible_moves = None
+            your_hand = game.hands.get(player, None)  # Might not be in the game
+    return flask.render_template('viewgame.html', game=game, db_game=db_game,
+                                 game_id=db_game.id, profile_form=profile_form,
                                  secret=secret, player=player,
                                  possible_moves=possible_moves,
                                  your_hand=your_hand
