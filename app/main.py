@@ -167,10 +167,6 @@ def viewgame(game_no, secret=None):
         else:
             profile_form = SecretProfileForm()
 
-    # if not db_game.game_started():
-    #     already_joined = not (player == '')
-    #     return flask.render_template('joingame.html', db_game=db_game,
-    #                                  player_already_joined=already_joined)
     game = None
     possible_moves = None
     your_hand = None
