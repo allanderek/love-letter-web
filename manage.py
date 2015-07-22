@@ -93,7 +93,7 @@ def coverage(quick=False, browser=False, phantom=False):
 def run_test_server():
     """Used by the phantomjs tests to run a live testing server"""
     # running the server in debug mode during testing fails for some reason
-    application.DEBUG = False
+    application.DEBUG = True
     application.TESTING = True
     port = application.config['LIVE_SERVER_PORT']
     application.run(port=port, use_reloader=False)

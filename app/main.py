@@ -9,6 +9,7 @@ import unittest
 import flask
 from flask import request, url_for
 import sqlalchemy
+import sqlalchemy.orm
 from flask.ext.sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import SQLAlchemyError
 import flask_wtf
@@ -30,39 +31,52 @@ application.config.from_object(Configuration)
 database = SQLAlchemy(application)
 
 
-class DBGame(database.Model):
+class DBLightProfile(database.Model):
     id = database.Column(database.Integer, primary_key=True)
-    a_secret = database.Column(database.Integer)
-    b_secret = database.Column(database.Integer)
-    c_secret = database.Column(database.Integer)
-    d_secret = database.Column(database.Integer)
-    state_log = database.Column(database.String(2048))
+    secret = database.Column(database.Integer)
+    nickname = database.Column(database.String(128))
+    gamename = database.Column(database.String(128))
+    game_id = database.Column(database.Integer, database.ForeignKey('game.id'))
 
-    def __init__(self, state_log):
-        self.a_secret = None
-        self.b_secret = None
-        self.c_secret = None
-        self.d_secret = None
-        self.state_log = state_log
+    def __init__(self, gamename):
+        self.gamename = gamename
+        self.nickname = gamename
+        self.secret = random.getrandbits(48)
+
+
+def create_spectator():
+    profile = DBLightProfile('')
+    return profile
+
+
+class DBGame(database.Model):
+    __tablename__ = 'game'
+    id = database.Column(database.Integer, primary_key=True)
+    num_players = database.Column(database.Integer)
+    players = database.relationship('DBLightProfile')
+
+    state_log = database.Column(database.String(2048))
+    # Slight shame that this is not a computed value but one that we have to
+    # keep track of and update whenever a player joins a game. However this
+    # makes the query for open games a simple filter. Note, I have not
+    # benchmarked this so perhaps querying all games and post-filtering for
+    # those that have not started is faster (but likely not when we have a large
+    # number of games, in particular a large number of finished games).
+    game_started = database.Column(database.Boolean, default=False)
 
     @property
     def secrets(self):
-        return {self.a_secret: 'a',
-                self.b_secret: 'b',
-                self.c_secret: 'c',
-                self.d_secret: 'd'}
+        return {p.secret: p for p in self.players}
 
     def player_taken(self, player):
-        return getattr(self, player + '_secret') is not None
+        return any(p.gamename == player for p in self.players)
 
     def take_player(self, player):
-        attr = player + '_secret'
-        new_secret = random.getrandbits(48)
-        setattr(self, attr, new_secret)
-        return new_secret
-
-    def game_started(self):
-        return all([self.player_taken(p) for p in ['a', 'b', 'c', 'd']])
+        profile = DBLightProfile(player)
+        self.players.append(profile)
+        database.session.commit()
+        self.game_started = len(self.players) == self.num_players
+        return profile.secret
 
     def is_player(self, secret):
         return secret in self.secrets
@@ -71,7 +85,8 @@ class DBGame(database.Model):
 def create_database_game():
     """ Create a game in the database. """
     game = Game(['a', 'b', 'c', 'd'])
-    dbgame = DBGame(game.serialise_game())
+    state_log = game.serialise_game()
+    dbgame = DBGame(num_players=4, state_log=state_log)
     database.session.add(dbgame)
     database.session.commit()
     return dbgame
@@ -110,10 +125,7 @@ def startgame():
 @application.route('/opengames')
 def opengames():
     try:
-        filter = sqlalchemy.or_(DBGame.a_secret.is_(None),
-                                DBGame.b_secret.is_(None),
-                                DBGame.c_secret.is_(None),
-                                DBGame.d_secret.is_(None))
+        filter = sqlalchemy.or_(DBGame.game_started.is_(False))
         open_games = database.session.query(DBGame).filter(filter)
     except SQLAlchemyError:
         flask.flash("There was some database error. Sorry, our fault.")
@@ -142,9 +154,24 @@ class SecretProfileForm(flask_wtf.Form):
     nickname = StringField("Your new display name", validators=[DataRequired()])
 
 
-@application.route('/updateprofile/<int:game_no>/<int:secret>',
+@application.route('/updateprofile/<int:game_no>/<int:profile_id>/<int:secret>',
                    methods=['POST'])
-def updateprofile(game_no, secret):
+def updateprofile(game_no, profile_id, secret):
+    try:
+        query = database.session.query(DBLightProfile)
+        profile = query.filter_by(id=profile_id).one()
+    except SQLAlchemyError:
+        flask.flash("Light profile not found for {0}".format(profile_id))
+        return flask.redirect(redirect_url())
+    if profile.secret != secret:
+        flask.flash("You do not have the correct secret to update that profile")
+        return flask.redirect(redirect_url())
+    form = SecretProfileForm()
+    if form.validate_on_submit():
+        profile.nickname = form.nickname.data
+        database.session.commit()
+        return flask.redirect(redirect_url())
+    flask.flash("Updated profile form no validated!")
     return flask.redirect(redirect_url())
 
 
@@ -156,7 +183,7 @@ def viewgame(game_no, secret=None):
     except SQLAlchemyError:
         flask.flash("Game #{} not found".format(game_no))
         return flask.redirect(redirect_url())
-    player = ''  # It won't be a blank player's turn
+    player = create_spectator()
     profile_form = None
     if secret is not None:
         try:
@@ -170,14 +197,17 @@ def viewgame(game_no, secret=None):
     game = None
     possible_moves = None
     your_hand = None
-    if db_game.game_started():
+    if db_game.game_started:
         game = Game(players=['a', 'b', 'c', 'd'], log=db_game.state_log)
-        if not game.is_game_finished() and game.on_turn[0] == player:
+        gamename = player.gamename
+        if not game.is_game_finished() and game.is_players_turn(gamename):
             possible_moves = game.available_moves()
-            your_hand = None  # The viewgame will use the possible_moves instead
+            your_hand = None  # viewgame will use the possible_moves instead
         else:
             possible_moves = None
-            your_hand = game.hands.get(player, None)  # Might not be in the game
+            # The player is in this game but they may be eliminated hence
+            # their hand will not be in game.hands.
+            your_hand = game.hands.get(gamename, None)
     return flask.render_template('viewgame.html', game=game, db_game=db_game,
                                  game_id=db_game.id, profile_form=profile_form,
                                  secret=secret, player=player,
@@ -203,7 +233,7 @@ def playcard(game_no, secret, card, nom_player=None, nom_card=None):
         return flask.redirect(redirect_url())
     card = Card(int(card))
     nom_card = None if nom_card is None else Card(int(nom_card))
-    move = Move(player, card, nominated_card=nom_card,
+    move = Move(player.gamename, card, nominated_card=nom_card,
                 nominated_player=nom_player)
     try:
         game.play_move(move)
@@ -461,6 +491,9 @@ class Game(object):
         one_player = len(self.live_players()) <= 1
         return completed_deck or one_player
 
+    def is_players_turn(self, player):
+        return self.on_turn is not None and self.on_turn[0] == player
+
     def _available_moves_for_card(self, player, card, other_card):
         """ Return the moves available for the first given card. The second
             given card is only included so that the countess rules can be
@@ -561,8 +594,8 @@ class Game(object):
                                        for p in self.players)
 
         if player != who:
-            message_format = "It's not your turn: {0} != {1}, {2}"
-            message = format(player, who, str(self.players))
+            msg_fmt = "It's not your turn: {0} != {1}, {2}"
+            message = msg_fmt.format(player.gamename, who, str(self.players))
             raise NotYourTurnException(message)
         if card not in [card_one, card_two]:
             raise Exception("Illegal attempt to play a card you do not have.")
@@ -715,7 +748,7 @@ class Game(object):
         elif card == Card.princess:
             # The player is out, so do not append them to the back of the
             # players list.
-            self.out_players.add(player)
+            eliminate_player(player)
 
         log_play()
         if player not in self.out_players:

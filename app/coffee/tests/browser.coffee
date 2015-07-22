@@ -62,7 +62,7 @@ class BrowserTest
 class CompleteRandomGameTest extends BrowserTest
   names: ['CompleteGame', 'randomgame']
   description: "A full run of creating and completing a game, with random moves"
-  numTests: 15
+  numTests: 18
 
   testBody: (test) ->
     neutral_game_address = null
@@ -75,6 +75,9 @@ class CompleteRandomGameTest extends BrowserTest
       for player in ['a', 'b', 'c', 'd']
         test.assertExists ('#claim-player-' + player)
 
+    # TODO: We should make this test a function that returns whether or not
+    # the game is in the opengames list and then check that it is NOW and also
+    # that after all the players have been claimed it is NOT.
     # Check that the new game exists in the list of open games
     casper.thenOpen serverUrl + '/opengames', ->
       # Basically the neutral game link without the serverUrl part
@@ -108,8 +111,6 @@ class CompleteRandomGameTest extends BrowserTest
       casper.then ->
         test.assertExists '.players-nick'
         test.assertSelectorHasText '.players-nick', 'Donatello'
-        # players_nick = casper.fetchText '.players-nick'
-        # test.assertEqual players_nick 'Donatello'
 
     # Now we check that if another player attempts to join the game,
     # they cannot.
@@ -147,6 +148,7 @@ class CompleteRandomGameTest extends BrowserTest
             else if casper.exists '.game-winner'
               game_finished = true
             else if not casper.exists '#eliminated-explanation'
+              debug_dump_html()
               game_logic_error = true
         casper.then ->
           if not game_finished and not internal_server_error
